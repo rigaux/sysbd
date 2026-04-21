@@ -1,0 +1,943 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>5. Moteurs de stockage &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="6. Opérateurs et algorithmes" href="opalgo.html" />
+    <link rel="prev" title="4. Structures d’index: le hachage" href="hachage.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;5. &lt;/span&gt;Moteurs de stockage</a></div>
+        <div class="rel">
+          <a href="hachage.html" title="4. Structures d’index: le hachage"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="opalgo.html" title="6. Opérateurs et algorithmes"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="moteurs-de-stockage">
+<span id="chap-moteurs"></span><h1><span class="section-number">5. </span>Moteurs de stockage<a class="headerlink" href="#moteurs-de-stockage" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Ce chapitre propose un passage en revue de quelques-uns des
+principaux  systèmes relationnels pour étudier la manière dont
+il gèrent le stockage des données et les paramètres qui permettent aux administrateurs
+de les ajuster. Cette étude est essentiellement destinée à
+montrer une mise en pratique concrète
+des principes généraux détaillés précédemment et ne prétend
+pas être une référence suffisante.</p>
+<section id="s1-oracle">
+<h2>S1: Oracle<a class="headerlink" href="#s1-oracle" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://mdcvideos.cnam.fr/videos/?video=">Vidéo sur le stockage oracle</a></p></li>
+</ul>
+</div>
+<p>Le système de représentation physique d’Oracle est  riche et
+illustre assez complètement les principes exposés dans les chapitres
+précédents.
+Un système Oracle (une <em>instance</em> dans la documentation) stocke
+les données dans un ou plusieurs <em>fichiers</em>. Ces fichiers sont
+entièrement attribués au SGBD, qui est seul à organiser leur
+contenu. Ils sont divisés en <em>blocs</em> dont la
+taille – paramétrable – peut varier de 1K à 8K.  Au sein d’un
+fichier des blocs consécutifs peuvent être regroupés pour former des
+<em>extensions</em> ( »<em>extent</em> »). Enfin un ensemble
+d’extensions permettant de stocker un des objets physiques
+de la base (une table, un index) constitue un <em>segment</em>.</p>
+<p>Il est possible de paramétrer, pour un ou plusieurs fichiers,
+le mode de stockage des données. Ce paramétrage comprend, entre autres,
+la taille des extensions, le nombre maximal d’extensions
+formant un segment, le pourcentage d’espace libre laissé
+dans les blocs, etc. Ces paramètres, et les fichiers auxquels
+ils s’appliquent, portent le nom de <em>tablespace</em>.</p>
+<p>Nous revenons maintenant en détail sur ces concepts.</p>
+<section id="fichiers-et-blocs">
+<h3>Fichiers et blocs<a class="headerlink" href="#fichiers-et-blocs" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Au moment de la création d’une base de données, il
+faut attribuer à Oracle au moins un fichier sur
+un disque. Ce fichier constitue l’espace de stockage
+initial qui contiendra, au départ, le dictionnaire
+de données.</p>
+<p>La taille de ce fichier est choisie par l’administrateur de bases de données
+(DBA), et dépend de
+l’organisation physique qui a été choisie.  On peut allouer un seul
+gros fichier et y placer toutes les données et tous les index, ou bien
+restreindre ce fichier initial au stockage du dictionnaire et ajouter
+d’autres fichiers, un pour les index, un pour les données, etc. Le
+deuxième type de solution est sans doute préférable, bien qu’un peu
+plus complexe. Il permet notamment, en plaçant les fichiers sur
+plusieurs disques, de bien répartir la charge des contrôleurs de
+disque. Une pratique courante – et recommandée par Oracle – est de
+placer un fichier de données sur un disque et un fichier d’index sur
+un autre. La répartition sur plusieurs disques permet en outre, grâce
+au paramétrage des <em>tablespaces</em> qui sera étudié plus loin,
+de régler finement l’utilisation de l’espace en fonction
+de la nature des informations – données ou index – qui
+y sont stockées.</p>
+<section id="les-blocs-oracle">
+<h4>Les blocs ORACLE<a class="headerlink" href="#les-blocs-oracle" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Le bloc est la plus petite unité de stockage gérée par ORACLE.
+La taille d’un bloc peut être choisie au moment de l’initialisation
+d’une base, et correspond obligatoirement à un multiple de
+la taille des blocs du système d’exploitation. À titre
+d’exemple, un bloc dans un système comme Linux occupe 1024 octets,
+et un bloc ORACLE occupe typiquement 4 096 ou 8 092 octets.</p>
+<figure class="align-center" id="id2">
+<span id="bloc-oracle"></span><a class="reference internal image-reference" href="_images/bloc-oracle.png"><img alt="_images/bloc-oracle.png" src="_images/bloc-oracle.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 5.1 </span><span class="caption-text">Structure d’un bloc Oracle</span><a class="headerlink" href="#id2" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La structure d’un bloc est identique quel que soit le type
+d’information qui y est stocké. Elle est constituée des
+cinq parties suivantes (<a class="reference internal" href="#bloc-oracle"><span class="std std-numref">Fig. 5.1</span></a>):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>l’entête</em> (<em>header</em>) contient l’adresse du bloc,
+et son type  (données, index, etc);</p></li>
+<li><p>le <em>répertoire des tables</em> donne la liste des tables
+pour lesquelles des informations sont stockées dans le bloc;</p></li>
+<li><p>le <em>répertoire des enregistrements</em> contient les adresses
+des enregistrements du bloc;</p></li>
+<li><p>un <em>espace libre</em> est laissé pour faciliter
+l’insertion de nouveaux enregistrements, ou l’agrandissement
+des enregistrements du bloc (par exemple un attribut à <code class="docutils literal notranslate"><span class="pre">NULL</span></code>
+auquel on donne une valeur par un <code class="docutils literal notranslate"><span class="pre">update</span></code>).</p></li>
+<li><p>enfin, <em>l’espace des données</em> contient les enregistrements.</p></li>
+</ul>
+</div></blockquote>
+<p>Les trois premières parties constituent un espace de stockage
+qui n’est pas directement dédié aux données (Oracle le nomme <em>l’overhead</em>).
+Cet espace « perdu » occupe environ 100 octets. Le reste
+permet de stocker les données des enregistrements.</p>
+</section>
+<section id="les-parametres-pctfree-et-pctused">
+<h4>Les paramètres <code class="docutils literal notranslate"><span class="pre">pctfree</span></code>  et <code class="docutils literal notranslate"><span class="pre">pctused</span></code><a class="headerlink" href="#les-parametres-pctfree-et-pctused" title="Lien permanent vers ce titre">¶</a></h4>
+<p>La quantité d’espace libre laissée dans un bloc peut être spécifiée
+grâce au paramètre <code class="docutils literal notranslate"><span class="pre">pctfree</span></code>, au moment de la création d’une
+table ou d’un index. Par exemple une valeur de 30% indique que les
+insertions se feront dans le bloc jusqu’à ce que 70% du bloc soit
+occupé, les 30% restant étant réservés aux éventuels agrandissements
+des enregistrements.  Une fois que cet espace disponible de 70% est
+rempli, Oracle considère qu’aucune nouvelle insertion ne peut se faire
+dans ce bloc.</p>
+<p>Notez qu’il peut arriver, pour reprendre l’exemple précédent, que des modifications
+sur les enregistrements (mise à <code class="docutils literal notranslate"><span class="pre">NULL</span></code> de certains attributs par exemple)
+fassent baisser le taux d’occupation du bloc. Quand ce taux baisse en dessous
+d’une valeur donnée par le paramètre <code class="docutils literal notranslate"><span class="pre">pctused</span></code> , Oracle considère
+que le bloc est à nouveau disponible pour des insertions.</p>
+<p>En résumé, <code class="docutils literal notranslate"><span class="pre">pctfree</span></code> indique le taux d’utilisation maximal au-delà duquel
+les insertions deviennent interdites, et <code class="docutils literal notranslate"><span class="pre">pctused</span></code> indique
+le taux d’utilisation minimal en-deçà duquel ces insertions sont à nouveau
+possibles. Les valeurs de ces paramètres dépendent  des caractéristiques des données
+stockées dans une table particulière.
+Une petite valeur pour <code class="docutils literal notranslate"><span class="pre">pctfree</span></code> permet aux insertions de remplir
+plus complètement le bloc, et peut donc mieux exploiter l’espace disque. Ce choix
+peut être valable pour des données qui sont rarement modifiées. En contrepartie une valeur
+plus importante de <code class="docutils literal notranslate"><span class="pre">pctfree</span></code> va occuper plus de blocs pour les mêmes
+données, mais offre plus de flexibilité pour des mises à jour fréquentes.</p>
+<p>Voici deux scénarios possibles pour spécifier <code class="docutils literal notranslate"><span class="pre">pctused</span></code>
+et <code class="docutils literal notranslate"><span class="pre">pctfree</span></code>. Dans le premier, <code class="docutils literal notranslate"><span class="pre">pctfree</span></code> vaut 30%,
+et <code class="docutils literal notranslate"><span class="pre">pctused</span></code>  40% (notez que la somme de ces deux valeurs
+ne peut jamais excéder 100%). Les insertions dans un bloc peuvent
+donc s’effectuer jusqu’à ce que 70% du bloc soit occupé. Le bloc
+est alors retiré de la liste des blocs disponibles pour des insertions,
+et seules des mises à jour (destructions ou modifications) peuvent
+affecter son contenu. Si, à la suite de ces mises à jour, l’espace
+occupé tombe en-dessous de 40%, le bloc est à nouveau marqué comme
+étant disponible pour des insertions.</p>
+<p>Dans ce premier scénario, on accepte d’avoir beaucoup d’expace
+innoccupé, au pire 60%. L’avantage est que le coût de maintenance
+de la liste des blocs disponibles pour l’insertion est limité
+pour Oracle.</p>
+<p>Dans le second scénario,  <code class="docutils literal notranslate"><span class="pre">pctfree</span></code> vaut 10% (ce qui est
+d’ailleurs la
+valeur par défaut), et <code class="docutils literal notranslate"><span class="pre">pctused</span></code> 80%. Quand le bloc est plein
+à 90%, les insertions s’arrêtent, mais elles reprennent dès que
+le taux d’occupation tombe sous 80%. On est assuré d’une bonne utilisation
+de l’espace, <em>mais</em> le travail du SGBD est plus important (et donc
+pénalisé) puisque la gestion des blocs disponibles/indisponibles
+devient plus intensive. De plus, en ne laissant
+que 10% de marge de manœuvre pour d’éventuelles extensions
+des enregistrements, on s’expose éventuellement
+à la nécessité de chaîner les
+enregistrements sur plusieurs blocs.</p>
+</section>
+<section id="enregistrements">
+<h4>Enregistrements<a class="headerlink" href="#enregistrements" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Un enregistrement est une suite  de données stockés, à quelques variantes près,
+comme décrit dans le chapitre <a class="reference internal" href="stock.html#chap-stock"><span class="std std-ref">Dispositifs de stockage</span></a>.  Par exemple
+les données de type <code class="docutils literal notranslate"><span class="pre">CHAR(n)</span></code> sont stockées dans un tableau
+d’octets de longueur <em>n+1</em>. Le premier octet indique
+la taille de la chaîne, qui doit donc être comprise entre 1 et 255.
+Les <em>n</em> octets suivants stockent les caractères de la chaînes, complétés
+par des blancs si la longueur de cette dernière est inférieure
+à la taille maximale. Pour les données
+de type <code class="docutils literal notranslate"><span class="pre">VARCHAR(n)</span></code> en revanche, seuls
+les octets utiles pour la représentation de la chaîne sont
+stockés. C’est un cas où une mise à jour élargissant la chaîne
+entraîne une réorganisation du bloc.</p>
+<p>Chaque attribut est précédé de la longueur de
+stockage. Dans Oracle les valeurs <code class="docutils literal notranslate"><span class="pre">NULL</span></code> sont
+simplement  représentées par une longueur de 0.
+Cependant, si les <em>n</em> derniers attributs d’un enregistrement
+sont <code class="docutils literal notranslate"><span class="pre">NULL</span></code>, Oracle se contente de placer une marque
+de fin d’enregistrement, ce qui permet d’économiser
+de l’espace.</p>
+<p>Chaque enregistrement est identifié par un <code class="docutils literal notranslate"><span class="pre">ROWID</span></code>,
+comprenant plusieurs parties, dont, notamment:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le numéro du bloc au sein du fichier;</p></li>
+<li><p>le numéro de l’enregistrement au sein du bloc;</p></li>
+<li><p>enfin l’identifiant du fichier.</p></li>
+</ul>
+</div></blockquote>
+<p>Un enregistrement peut occuper plus d’un bloc, notamment s’il contient
+les attributs de type <code class="docutils literal notranslate"><span class="pre">LONG</span></code>. Dans ce cas Oracle  utilise un
+<em>chaînage</em> vers un autre bloc. Un situation comparable est celle
+de l’agrandissement d’un enregistrement qui va au-delà de l’espace
+libre disponible. Dans ce cas Oracle  effectue une <em>migration</em>:
+l’enregistrement est déplacé en totalité dans un autre bloc, et un
+pointeur est laissé dans le bloc d’origine pour ne pas avoir à
+modifier l’adresse de l’enregistrement (<code class="docutils literal notranslate"><span class="pre">ROWID</span></code>). Cette adresse
+peut en effet être utilisée par des index, et une réorganisation totale
+serait trop coûteuse. Migration et chaînage sont bien entendu
+pénalisants pour les performances.</p>
+</section>
+<section id="extensions-et-segments">
+<h4>Extensions et segments<a class="headerlink" href="#extensions-et-segments" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Un segment est un ensemble de fragments  de stockage (les « extensions, voir ci-dessous)
+pour un des types de données
+persistantes  géré par Oracle.  Il existe de nombreux types de segments,
+voici les principaux:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>les segments de données contiennent les enregistrements des tables,
+avec  un segment de ce type par table;</p></li>
+<li><p>les segments d’index contiennent les enregistrements des index;
+il y a un segment par index;</p></li>
+<li><p>les segments temporaires sont utilisés pour stocker des données
+pendant l’exécution des requêtes (par exemple pour les tris);</p></li>
+<li><p>les segments <em>rollbacks</em> contiennent les informations
+permettant d’effectuer une reprise sur panne ou l’annulation
+d’une transaction; il s’agit typiquement des données
+avant modification, dans une transaction qui n’a pas encore été validée.</p></li>
+</ul>
+</div></blockquote>
+<p>Une extension est un suite contiguë (au sens de l’emplacement sur le disque)
+de blocs. En général une extension est affectée à un
+seul type de données (par exemple les enregistrements d’une table).
+Comme nous l’avons vu en détail, cette contiguïté est un facteur
+essentiel pour l’efficacité de l’accès aux données, puisqu’elle
+évite les déplacements des têtes de lecture, ainsi que le délai de rotation.</p>
+<p>Le nombre de blocs dans une extension peut être spécifié par l’administrateur.
+Bien entendu des extensions de taille importante favorisent de bonnes
+performances, mais il existe des contreparties:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>si une table ne contient que quelques enregistrements, il
+est inutile de lui allouer une extension contenant des milliers
+de blocs;</p></li>
+<li><p>l’utilisation et la réorganisation de l’espace de stockage
+peuvent être plus difficiles pour des extensions de grande taille.</p></li>
+</ul>
+</div></blockquote>
+<p>Les extensions sont l’unité de stockage constituant les segments.
+Si on a par exemple indiqué que la taille des extensions est de 50 blocs,
+un segment (de données ou d’index) consistera en <em>n</em> extensions
+de 50 blocs chacune.</p>
+<p>Une extension initiale est allouée à la création d’un segment.
+De nouvelles extensions sont allouées dynamiquement (autrement dit,
+sans intervention de l’administrateur)
+au segment au fur et à mesure des insertions: rien ne peut garantir
+qu’une nouvelle extension est contiguë avec les précédentes. En revanche une fois
+qu’une extension est affectée à un segment, il faut une commande explicite
+de l’administrateur, ou une destruction de la table ou de l’index, pour
+que cette extension redevienne libre.</p>
+<p>Quand Oracle doit créer une nouvelle extension
+et se trouve dans l’incapacité de constituer un espace libre suffisant,
+une erreur survient. C’est alors à l’administrateur d’affecter
+un nouveau fichier à la base, ou de réorganiser l’espace dans les
+fichiers existant.</p>
+</section>
+</section>
+<section id="les-tablespaces">
+<h3>Les <em>tablespaces</em><a class="headerlink" href="#les-tablespaces" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un <em>tablespace</em> est un espace physique constitué de un (au moins) ou
+plusieurs fichiers. Une base de données Oracle
+est donc organisée sous la forme d’un ensemble de <em>tablespace</em>, sachant
+qu’il en existe toujours un, créé au moment de l’initialisation de la base,
+et nommé <code class="docutils literal notranslate"><span class="pre">SYSTEM</span></code>.  Ce <em>tablespace</em> contient le dictionnaire
+de données, y compris les procédures stockées, les <em>triggers</em>, etc.</p>
+<figure class="align-center" id="id3">
+<span id="oraphys"></span><a class="reference internal image-reference" href="_images/oraphys.png"><img alt="_images/oraphys.png" src="_images/oraphys.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 5.2 </span><span class="caption-text">Organisation des <em>tablespaces</em> Oracle</span><a class="headerlink" href="#id3" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’organisation du stockage au sein d’un <em>tablespace</em>
+est décrite par de nombreux paramètres (taille des extensions,
+nombre maximal d’extensions, etc.) qui sont donnés à la création du <em>tablespace</em>,
+et peuvent être modifiés par la suite.  C’est donc au niveau du <em>tablespace</em>
+(et pas au niveau du fichier) que l’administrateur de la base peut décrire
+le mode de stockage des données. La création de plusieurs <em>tablespaces</em>,
+avec des paramètres de stockage individualisés, offre
+de nombreuses possibilités:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>adaptation du mode de stockage en fonction d’un type
+de données particulier;</p></li>
+<li><p>affectation d’un espace disque limité aux utilisateurs;</p></li>
+<li><p>contrôle sur la disponibilité de parties de la base, par mise
+hors service d’un ou plusieurs <em>tablespaces</em>;</p></li>
+<li><p>enfin – et surtout – répartition des données sur plusieurs disques
+afin d’améliorer les performances.</p></li>
+</ul>
+</div></blockquote>
+<p>Un exemple typique est la séparation des données et des index, si possible
+sur des disques différents, afin d’optimiser la charge des contrôleurs de disque.
+Il est également possible de créer des <em>tablespaces</em> dédiées aux données temporaires
+ce qui évite de mélanger les enregistrements des tables et ceux temporairement
+créés au cours d’une opération de tri. Enfin un <em>tablespace</em> peut être
+placé en mode de lecture, les écritures étant interdites. Toutes ces
+possibilités donnent beaucoup de flexibilité pour la gestion des données,
+aussi bien dans un but d’améliorer les performances que pour la sécurité des accès.</p>
+<p>Au moment de la création d’un <em>tablespace</em>, on indique les paramètres de
+stockage par défaut des tables ou index qui seront stockés dans ce
+<em>tablespace</em>. L’expression « par défaut » signifie qu’il est possible,
+lors de la création d’une table particulière, de donner des paramètres
+spécifiques à cette table, mais que les paramètres du <em>tablespace</em>
+s’appliquent si on ne le fait pas. Les principaux paramètres de
+stockage sont:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>la taille de l’extension initiale (par défaut 5 blocs);</p></li>
+<li><p>la taille de chaque nouvelle extension (par défaut 5 blocs également);</p></li>
+<li><p>le nombre maximal d’extensions, ce qui donne donc,
+avec la taille des extensions, le nombre
+maximal de blocs alloués à une table ou index;</p></li>
+<li><p>la taille des extensions peut croître progressivement,
+selon un ratio indiqué par <code class="docutils literal notranslate"><span class="pre">pctincrease</span></code>;
+une valeur de 50% pour ce paramètre indique par exemple
+que chaque nouvelle extension a une taille supérieure
+de 50% à la précédente.</p></li>
+</ul>
+</div></blockquote>
+<p>Voici un exemple de création de <em>tablespace</em>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="n">TABLESPACE</span> <span class="n">TB1</span>
+  <span class="n">DATAFILE</span> <span class="s1">&#39;fichierTB1.dat&#39;</span> <span class="k">SIZE</span> <span class="mi">50</span><span class="n">M</span>
+  <span class="k">DEFAULT</span> <span class="k">STORAGE</span> <span class="p">(</span>
+    <span class="n">INITIAL</span> <span class="mi">100</span><span class="n">K</span>
+    <span class="k">NEXT</span> <span class="mi">40</span><span class="n">K</span>
+    <span class="n">MAXEXTENTS</span> <span class="mi">20</span><span class="p">,</span>
+     <span class="n">PCTINCREASE</span> <span class="mi">20</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>La commande crée un <em>tablespace</em>, nommé <code class="docutils literal notranslate"><span class="pre">TB1</span></code>, et lui affecte un premier
+fichier de 50 mégaoctets. Les paramètres de la partie <code class="docutils literal notranslate"><span class="pre">DEFAULT</span> <span class="pre">STORAGE</span></code>
+indiquent, dans l’ordre:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>la taille de la première extension  allouée à une table (ou un index);</p></li>
+<li><p>la taille de la prochaine extension, si l’espace alloué à la table
+doit être agrandi;</p></li>
+<li><p>le nombre maximal d’extensions, ici 20;</p></li>
+<li><p>enfin chaque nouvelle extension est 20% plus grande que la
+précédente.</p></li>
+</ul>
+</div></blockquote>
+<p>En supposant que la taille d’un bloc est 4K, on obtient une première
+extension de 25 blocs, une seconde de 10 blocs, une troisième de
+<span class="math notranslate nohighlight">\(10 \times 1,2 = 12\)</span> blocs, etc.</p>
+<p>Le fait d’indiquer une taille maximale permet de contrôler que l’espace ne
+sera pas utilisé sans limite, et sans contrôle de l’administrateur. En contrepartie,
+ce dernier doit être prêt à prendre des mesures pour répondre aux demandes
+des utilisateurs quand des messages sont produits par Oracle indiquant
+qu’une table a atteint sa taille limite.</p>
+<p>Voici un exemple de <em>tablespace</em> défini avec un paramétrage plus souple:
+d’une part il n’y a pas de limite au nombre d’extensions d’une table, d’autre part
+le fichier est en mode <code class="docutils literal notranslate"><span class="pre">auto-extension</span></code>, ce qui signifie qu’il
+s’étend automatiquement, par tranches de 5 mégaoctets, au fur et à mesure
+que les besoins en espace augmentent. La taille du fichier est elle-même
+limitée à 500 mégaoctets.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="n">TABLESPACE</span> <span class="n">TB2</span>
+  <span class="n">DATAFILE</span> <span class="s1">&#39;fichierTB2.dat&#39;</span> <span class="k">SIZE</span> <span class="mi">2</span><span class="n">M</span>
+  <span class="n">AUTOEXTEND</span> <span class="k">ON</span> <span class="k">NEXT</span> <span class="mi">5</span><span class="n">M</span> <span class="n">MAXSIZE</span> <span class="mi">500</span><span class="n">M</span>
+  <span class="k">DEFAULT</span> <span class="k">STORAGE</span> <span class="p">(</span><span class="n">INITIAL</span> <span class="mi">128</span><span class="n">K</span> <span class="k">NEXT</span> <span class="mi">128</span><span class="n">K</span> <span class="n">MAXEXTENTS</span> <span class="n">UNLIMITED</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Il est possible, après la création d’un <em>tablespace</em>, de modifier
+ses paramètres, étant entendu que la modification ne s’applique
+pas aux tables existantes mais à celles qui vont être créées.
+Par exemple on peut modifier le <em>tablespace</em> <code class="docutils literal notranslate"><span class="pre">TB1</span></code> pour
+que les extensions soient de 100K, et le nombre maximal d’extensions porté
+à 200.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">ALTER</span> <span class="n">TABLESPACE</span> <span class="n">TB1</span>
+   <span class="k">DEFAULT</span> <span class="k">STORAGE</span> <span class="p">(</span>
+    <span class="k">NEXT</span> <span class="mi">100</span><span class="n">K</span>
+     <span class="n">MAXEXTENTS</span> <span class="mi">200</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Voici quelques-unes des différentes actions
+disponibles sur un <em>tablespace</em>,:</p>
+<blockquote>
+<div><ul>
+<li><p>On peut mettre un <em>tablespace</em> hors-service, soit pour
+effectuer une sauvegarde d’une partie de la base, soit pour
+rendre cette partie de la base indisponible.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">ALTER</span> <span class="n">TABLESPACE</span> <span class="n">TB1</span> <span class="n">OFFLINE</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Cette commande permet en quelque sorte de traiter un <em>tablespace</em> comme
+une sous-base de données.</p>
+</li>
+<li><p>On peut mettre un <em>tablespace</em> en lecture seule.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">ALTER</span> <span class="n">TABLESPACE</span> <span class="n">TB1</span> <span class="k">READ</span> <span class="k">ONLY</span><span class="p">;</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<blockquote>
+<div><ul class="simple">
+<li><p>Enfin on peut ajouter un nouveau fichier à un <em>tablespace</em>
+afin d’augmenter sa capacité de stockage.</p></li>
+</ul>
+<blockquote>
+<div><div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">ALTER</span> <span class="n">TABLESPACE</span> <span class="k">ADD</span> <span class="n">DATAFILE</span> <span class="s1">&#39;fichierTB1-2.dat&#39;</span> <span class="k">SIZE</span> <span class="mi">300</span> <span class="n">M</span><span class="p">;</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div></blockquote>
+</div></blockquote>
+<p>Au moment de la création d’une base, on doit donner la taille et l’emplacement d’un
+premier fichier qui sera affecté au <em>tablespace</em> <code class="docutils literal notranslate"><span class="pre">SYSTEM</span></code>. À chaque
+création d’un nouveau <em>tablespace</em> par la suite, il faudra créer un fichier qui
+servira d’espace de stockage initial pour les données qui doivent  y
+être stockées. Il faut bien noter qu’un fichier n’appartient qu’à un seul
+<em>tablespace</em>, et que, dès le moment où ce fichier est créé, son contenu
+est exlusivement géré par Oracle, même si une partie seulement est utilisée.
+En d’autres termes il ne faut pas affecter un fichier de 1 Go à un
+<em>tablespace</em> destiné seulement à contenir 100 Mo de données, car les 900 Mo
+restant ne servent alors à rien.</p>
+<p>Oracle utilise l’espace disponible dans un fichier pour y créer de nouvelles
+extensions quand la taille des données augmente, ou de nouveaux segments
+quand des tables ou index sont créés. Quand un fichier est plein – ou, pour
+dire les choses plus précisément, quand Oracle ne trouve pas assez d’espace
+disponible pour créer un nouveau segment ou une nouvelle extension –,
+un message d’erreur avertit l’administrateur qui dispose alors de plusieurs solutions,:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>créer un nouveau fichier, et l’affecter au <em>tablespace</em> (voir la commande ci-dessus);</p></li>
+<li><p>modifier la taille d’un fichier existant;</p></li>
+<li><p>enfin, permettre à un ou plusieurs fichiers de croître
+dynamiquement en fonction des besoins, ce qui peut simplifier
+la gestion de l’espace.</p></li>
+</ul>
+</div></blockquote>
+<section id="comment-inspecter-les-tablespaces">
+<h4>Comment inspecter les <em>tablespaces</em><a class="headerlink" href="#comment-inspecter-les-tablespaces" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Oracle fournit un certain nombre de vues dans son dictionnaire de données pour
+consulter l’organisation physique d’une base, et l’utilisation de l’espace.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>La vue <code class="docutils literal notranslate"><span class="pre">DBA_EXTENTS</span></code> donne la liste des extensions;</p></li>
+<li><p>La vue <code class="docutils literal notranslate"><span class="pre">DBA_SEGMENTS</span></code> donne la liste des segments;</p></li>
+<li><p>La vue <code class="docutils literal notranslate"><span class="pre">DBA_FREE_SPACE</span></code> permet de mesurer l’espace libre;</p></li>
+<li><p>La vue <code class="docutils literal notranslate"><span class="pre">DBA_TABLESPACES</span></code> donne la liste des <em>tablespaces</em>;</p></li>
+<li><p>La vue <code class="docutils literal notranslate"><span class="pre">DBA_DATA_FILES</span></code> donne la liste des fichiers.</p></li>
+</ul>
+</div></blockquote>
+<p>Ces vues sont gérées sous le compte utilisateur <code class="docutils literal notranslate"><span class="pre">SYS</span></code> qui est
+réservé à l’administrateur de la base. Voici quelques exemples
+de requêtes permettant d’inspecter une base.
+On suppose que la base contient deux <em>tablespace</em>, <code class="docutils literal notranslate"><span class="pre">SYSTEM</span></code> avec un fichier
+de 50M, et <code class="docutils literal notranslate"><span class="pre">TB1</span></code> avec deux fichiers dont les tailles repectives
+sont 100M et 200M.</p>
+<p>La première requête affiche les principales informations
+sur les <em>tablespaces</em>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span> <span class="n">tablespace_name</span> <span class="ss">&quot;TABLESPACE&quot;</span><span class="p">,</span>
+       <span class="n">initial_extent</span> <span class="ss">&quot;INITIAL_EXT&quot;</span><span class="p">,</span>
+       <span class="n">next_extent</span> <span class="ss">&quot;NEXT_EXT&quot;</span><span class="p">,</span>
+       <span class="n">max_extents</span> <span class="ss">&quot;MAX_EXT&quot;</span>
+<span class="k">FROM</span> <span class="n">sys</span><span class="p">.</span><span class="n">dba_tablespaces</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>On obtient quelque chose qui ressemble à:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>TABLESPACE  INITIAL_EXT  NEXT_EXT     MAX_EXT
+----------  -----------  --------     -------
+SYSTEM      10240000     10240000          99
+TB1         102400         50000          200
+</pre></div>
+</div>
+<p>On peut obtenir la liste des fichiers d’une base, avec le
+<em>tablespace</em> auquel ils sont affectés:</p>
+<p>Avec un résultat:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>FILE_NAME    BYTES      TABLESPACE_NAME
+------------ ---------- -------------------
+fichier1      5120000   SYSTEM
+fichier2     10240000   TB1
+fichier3     20480000   TB1
+</pre></div>
+</div>
+<p>Enfin on peut obtenir l’espace disponible
+dans chaque <em>tablespace</em>. Voici par exemple
+la requête qui donne des informations statistiques
+sur les espaces libres du <em>tablespace</em> <code class="docutils literal notranslate"><span class="pre">SYSTEM</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span> <span class="n">tablespace_name</span><span class="p">,</span> <span class="n">file_id</span><span class="p">,</span>
+   <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>    <span class="ss">&quot;PIECES&quot;</span><span class="p">,</span>
+   <span class="k">MAX</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span> <span class="ss">&quot;MAXIMUM&quot;</span><span class="p">,</span>
+   <span class="k">MIN</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span> <span class="ss">&quot;MINIMUM&quot;</span><span class="p">,</span>
+   <span class="k">AVG</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span> <span class="ss">&quot;AVERAGE&quot;</span><span class="p">,</span>
+   <span class="k">SUM</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span> <span class="ss">&quot;TOTAL&quot;</span>
+<span class="k">FROM</span> <span class="n">sys</span><span class="p">.</span><span class="n">dba_free_space</span>
+<span class="k">WHERE</span> <span class="n">tablespace_name</span> <span class="o">=</span> <span class="s1">&#39;SYSTEM&#39;</span>
+<span class="k">GROUP</span> <span class="k">BY</span> <span class="n">tablespace_name</span><span class="p">,</span> <span class="n">file_id</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Résultat:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>TABLESPACE    FILE_ID  PIECES   MAXIMUM    MINIMUM  AVERAGE     SUM
+----------    -------  ------   -------    -------  -------   ------
+SYSTEM             1       2      2928        115   1521.5    3043
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">SUM</span></code> donne le nombre total de blocs libres,
+<code class="docutils literal notranslate"><span class="pre">PIECES</span></code> montre la fragmentation de l’espace libre,
+et <code class="docutils literal notranslate"><span class="pre">MAXIMUM</span></code> donne l’espace contigu maximal.
+Ces informations sont utiles pour savoir s’il est possible
+de créer des tables volumineuses pour lesquelles on souhaite
+réserver dès le départ une extension de taille suffisante.</p>
+</section>
+</section>
+<section id="creation-des-tables">
+<h3>Création des tables<a class="headerlink" href="#creation-des-tables" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Tout utilisateur Oracle ayant les droits suffisants peut
+créer des tables. Notons que sous Oracle la notion
+d’utilisateur et celle de base de données sont liées,:
+un utilisateur (avec des droits appropriés) dispose d’un
+espace permettant de stocker des tables, et tout
+ordre <code class="docutils literal notranslate"><span class="pre">CREATE</span> <span class="pre">TABLE</span></code> effectué par cet utilisateur
+crée une table et des index qui appartiennent
+à cet utilisateur.</p>
+<p>Il est possible, au moment où on spécifie le profil
+d’un utilisateur, d’indiquer dans quels <em>tablespaces</em> il
+a le droit de placer des tables, de quel espace
+total il dispose sur chacun de ces <em>tablespaces</em>,
+et quel est le <em>tablespace</em> par défaut pour cet utilisateur.</p>
+<p>Il devient alors possible d’inclure dans la commande
+<code class="docutils literal notranslate"><span class="pre">CREATE</span> <span class="pre">TABLE</span></code> des paramètres de stockage. Voici
+un exemple,:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Film</span> <span class="p">(...)</span>
+  <span class="n">PCTFREE</span> <span class="mi">10</span>
+  <span class="n">PCTUSED</span> <span class="mi">40</span>
+  <span class="n">TABLESPACE</span> <span class="n">TB1</span>
+  <span class="k">STORAGE</span> <span class="p">(</span> <span class="n">INITIAL</span> <span class="mi">50</span><span class="n">K</span>
+                <span class="k">NEXT</span> <span class="mi">50</span><span class="n">K</span>
+                <span class="n">MAXEXTENTS</span> <span class="mi">10</span>
+                <span class="n">PCTINCREASE</span> <span class="mi">25</span> <span class="p">);</span>
+</pre></div>
+</div>
+<p>On indique donc que la table doit être stockée
+dans le <em>tablespace</em> <code class="docutils literal notranslate"><span class="pre">TB1</span></code>, et on remplace les
+paramètres de stockage de ce <em>tablespace</em> par des paramètres
+spécifiques à la table <code class="docutils literal notranslate"><span class="pre">Film</span></code>.</p>
+<p>Par défaut une table est organisée séquentiellement sur
+une ou plusieurs extensions. Les index sur la table sont
+stockés dans un autre segment, et font référence aux
+enregistrements grâce au <code class="docutils literal notranslate"><span class="pre">ROWID</span></code>.</p>
+</section>
+</section>
+<section id="s2-mysql">
+<h2>S2: MySQL<a class="headerlink" href="#s2-mysql" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://mdcvideos.cnam.fr/videos/?video=">Vidéo sur le stockage MySQL</a></p></li>
+</ul>
+</div>
+<p>Une importante spécificité de MySQL par rapport à d’autres
+SGBD est de proposer des moteurs de stockage différents et même de permettre
+leur cohabitation dans une même base de données.  Il s’agit
+d’une souplesse assez exceptionnelle, car les moteurs de stockage ont des
+comportements spécifiques quant à la manière de conserver les données des
+tables et index, et sont donc plus ou moins adaptés selon les contextes
+d’utilisation.</p>
+<p>Les deux moteurs étudiés ici sont MyISAM et InnoDB. Le premier
+est efficace et compact, mais ne gère pas les transactions, au contraire du
+second.</p>
+<p>On peut choisir le moteur de stockage au moment de la création d’une
+table. La syntaxe est la suivante.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="o">&lt;</span><span class="n">nomTable</span><span class="o">&gt;</span> <span class="p">(...)</span> <span class="n">engine</span> <span class="o">&lt;</span><span class="n">nomMoteur</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>Nous avons choisi de ne pas parler des autres moteurs de stockage
+dont voici une brève description.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">memory</span></code>  (ou <code class="docutils literal notranslate"><span class="pre">HEAP</span></code>) qui permet de gérer des tables en mémoire principale
+et peut ponctuellement être utile pour stocker efficacement des tables temporaires.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Archive</span></code> qui compresse les données et permet de diminuer les
+coûts de stockage pour des volumes importants. En revanche, il n’accepte que
+les instructions <code class="docutils literal notranslate"><span class="pre">select</span></code> et <code class="docutils literal notranslate"><span class="pre">insert</span></code>. Il es utile surtout pour
+l’archivage.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Ndb</span></code> est un moteur de stockage dédié aux systèmes distribués (répartition
+dans une grappe de serveurs.</p></li>
+<li><p><cite>enfin, `Maria`</cite> est le moteur de stockage  de la version <em>Open source</em>
+nommée MariaDB depuis l’acquisition de MySQL par Oracle en 2010.</p></li>
+</ul>
+</div></blockquote>
+<p>MySQL s’appuie sur les fichiers du système d’exploitation, soit complètement
+dans le cas de MyISAM qui associe une base à un répertoire et crée dans ce
+répertoire des fichiers pour chaque table, soit partiellement pour InnoDB
+qui stocke plusieurs tables dans un même fichier.</p>
+<p>Chaque ligne d’une table relationnelle est stockée dans un enregistrement
+physique dans un fichier.  Nous ne rentrerons pas dans le détail de la
+structure d’un enregistrement qui varie selon les moteurs de stockage. Un
+enregistrement contient des données dites de contrôle
+(date de création, de modification, liens vers d’autres versions,
+taille de l’enregistrement) qui servent au système en
+plus des valeurs des attributs.</p>
+<section id="myisam">
+<h3>MyISAM<a class="headerlink" href="#myisam" title="Lien permanent vers ce titre">¶</a></h3>
+<p>MyISAM est le premier moteur de stockage de MySQL.  Par défaut (autrement dit
+en l’absence de spécification d’un moteur) c’est lui qui stocke les tables.  Le
+moteur MyISAM nécessite peu de volume: les données y sont stockées en tas,
+sans utiliser de blocs.</p>
+<p>Le stockage en tas est très simple et non organisé: chaque nouvel
+enregistrement est placé soit dans le premier emplacement
+libre plus grand que lui,
+soit à la suite du dernier enregistrement.
+Quand un enregistrement
+est détruit, il libère une place qui peut être réutilisée
+ensuite à l’occasion de l’insertion d’un enregistrement de taille
+inférieure ou égale.</p>
+<p>MyISAM n’utilise pas de <em>cache</em> pour les données et ne
+propose aucun mécanisme transactionnel. Une lecture
+(d’un enregistrement de données) est toujours physique (accès
+au disque) et une écriture est toujours faite immédiatement et remplace
+l’ancienne version de l’enregistrement. La modification est immédiatement
+visible des autres utilisateurs.</p>
+<p>Pour chaque table MyISAM, trois fichiers sont créés
+par défaut dans le répertoire de la base de données:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;nomTable&gt;.frm</span></code>: la description de la table <code class="docutils literal notranslate"><span class="pre">nomtable</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;nomTable&gt;.MYD</span></code>: les données de la table <code class="docutils literal notranslate"><span class="pre">nomtable</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;nomTable&gt;.MYI</span></code>: les index  de la table <code class="docutils literal notranslate"><span class="pre">nomtable</span></code>, dont un index
+unique pour la clé primaire;</p></li>
+</ul>
+</div></blockquote>
+<p>Puisque MyISAM n’utilise pas de cache pour les données des tables, celles-ci
+restent toujours cohérentes sur le disque, même si le serveur
+s’arrête de manière inopinée. Le moteur MyISAM n’a donc
+pas besoin d’un journal des transactions (tout se tient),
+même s’il existe un journal de sauvegarde
+destiné aux  reprises à chaud.
+Les seules incohérences qui peuvent apparaître
+seront dans les index, qui peuvent être réparés par reconstruction
+à partir des données.</p>
+<p>En revanche, les index sont conservés dans un cache. Toute la stratégie
+d’évaluation des requêtes s’appuie sur l’hypothèse que les
+index seront utilisés. La présence des index en  cache
+(partiellement ou totalement) est alors une garantie de très
+grande efficacité.</p>
+<p>On peut modifier l’emplacement des fichiers
+au niveau de chaque  table en positionnant
+deux
+paramètres lors de l’instruction <code class="docutils literal notranslate"><span class="pre">create</span> <span class="pre">table</span></code>. Ces paramètres
+permettent de répartir les entrées / sorties:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">DATA</span> <span class="pre">DIRECTORY</span></code>: emplacement du fichier de données;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">INDEX</span> <span class="pre">DIRECTORY</span></code>,: emplacement du fichier des index.</p></li>
+</ul>
+</div></blockquote>
+<p>Voici un exemple de répartition des données et des index.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Client</span>
+    <span class="p">(</span><span class="n">id_client</span> <span class="nb">INT</span> <span class="n">AUTO_INCREMENT</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="n">prénom</span> <span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="n">nom</span> <span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="n">adresse</span> <span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">255</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="n">ville</span>   <span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="n">code_postal</span> <span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+    <span class="k">PRIMARY</span> <span class="k">KEY</span> <span class="p">(</span><span class="n">id_client</span><span class="p">)</span>
+ <span class="p">)</span> <span class="k">DATA</span> <span class="n">DIRECTORY</span> <span class="o">=</span> <span class="s1">&#39;/disk1/Credit&#39;</span>
+    <span class="k">INDEX</span> <span class="n">DIRECTORY</span> <span class="o">=</span> <span class="s1">&#39;/disk2/index/Credit&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Quand on est sûr de disposer de deux disques physiques (attention, pas
+des volumes logiques), il est important, pour de gros
+volumes, de placer les index et les données sur des disques
+différents. Puisque le serveur accède à ces fichiers indépendamment,
+les accès s’en trouveront parallélisés. Si on ne maîtrise pas
+complètement la répartition
+physique des disques, un stockage par défaut fera l’affaire,
+éventuellement sur des périphériques RAID.</p>
+</section>
+<section id="innodb">
+<h3>InnoDB<a class="headerlink" href="#innodb" title="Lien permanent vers ce titre">¶</a></h3>
+<p>InnoDB est le moteur par défaut depuis la version 5.5.
+C’est un moteur de stockage qui apporte
+essentiellement deux fonctionnalités par rapport à MyISAM:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>un support complet pour les transactions;</p></li>
+<li><p>la prise en compte des contraintes d’intégrité référentielle.</p></li>
+</ul>
+</div></blockquote>
+<p>InnoDB utilise une technique très différente de MyISAM. Les données sont
+organisées  par blocs, et InnoDB utilise un cache pour conserver en mémoire les
+plus utilisés.  InnoDB est surtout un moteur transactionnel qui propose tous
+les mécanismes de validation, annulation et cohérence décrits par la norme
+SQL99 (voir <span class="xref std std-ref">chap-introconc</span>).  Le modèle de stockage et de
+transactionindex{transaction}s est assez nettement inspiré de celui
+d’ORACLE.</p>
+<p>InnoDB  propose deux options pour l’affectation des données aux fichiers de la
+base :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>un seul ensemble de fichiers, donné par le paramètre <code class="docutils literal notranslate"><span class="pre">innodb_data_file_path</span></code>.
+Toutes les tables et index seront répartis dans ces fichiers;</p></li>
+<li><p>un fichier par table.</p></li>
+</ul>
+</div></blockquote>
+<p>Dans tous les cas, un fichier <code class="docutils literal notranslate"><span class="pre">table}.frm</span></code> sera créé dans
+le sous-répertoire
+de la base. Comme pour MyISAM, il contient la description de la table.
+Les paramètres de stockage sont donnés à la création du fichier,
+et spécifiés dans le fichier de configuration. Il s’agit:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>de l’emplacement des fichiers de la base</p></li>
+<li><p>de leur taille</p></li>
+<li><p>et éventuellement d’une option d’extension automatique.</p></li>
+</ul>
+</div></blockquote>
+<p>Par exemple on indiquera un fichier <code class="docutils literal notranslate"><span class="pre">mydata.ibd</span></code> de taille initiale de 100
+Mo et qui peut s’étendre automatiquement jusqu’à 1 Go avec
+la spécification suivante, dans le fichier
+<code class="docutils literal notranslate"><span class="pre">my.cnf</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>innodb_data_file_path=mydata.ibd:100M:autoextend:1G
+</pre></div>
+</div>
+<p>Quand on veut ajouter un fichier il suffit de le spécifier dans
+le fichier de configuration (seul le dernier fichier peut
+avoir l’option <code class="docutils literal notranslate"><span class="pre">autoextend</span></code>).</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>innodb_data_file_path=mydata.ibd:100M;mydata2.idb:100M:autoextend:1G
+</pre></div>
+</div>
+<p>Si on choisit d’activer le paramètre <code class="docutils literal notranslate"><span class="pre">innodb_file_per_table</span></code>, la table
+et ses index sont stockés dans un fichier du sous-repertoire de la base. Le
+fichier est auto-extensible et porte le nom <code class="docutils literal notranslate"><span class="pre">table.ibd</span></code>}.</p>
+<p>InnoDB organise les tables d’après l’index
+principal sur la clé primaire.
+Il s’agit d’une structure non-dense, donc <em>plaçante</em>:
+l’emplacement des enregistrements n’est pas libre, mais
+se détermine d’après la structure  de l’index associé.
+Entre autres caractéristiques, le stockage
+est ordonné selon la clé primaire, ce qui peut
+considérablement améliorer la clause  <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">by</span></code>
+ou certains algorihmes de jointures
+car aucune indirection n’est
+nécessaire pour accéder aux données de la table.</p>
+<p>Ce mode de stockage est  un peu plus compliqué à gérer.
+Les insertions sont un peu plus lentes en moyenne
+que dans un stockage en tas. C’est un bon compromis
+si la base est
+plus lue qu’approvisionée en données nouvelles. Il
+est d’ailleurs proposé (au moins à titre d’option) dans la plupart
+des SGBD (dans Oracle par exemple il correspond
+aux <code class="docutils literal notranslate"><span class="pre">index-organized</span> <span class="pre">tables</span></code>).</p>
+<p>Il est fortement déconseillé
+de modifier la clé primaire d’une ligne dans InnoDB
+car cela implique une réorganisation importante de la structure,
+y compris des index secondaires.</p>
+<p>Le cache  de données InnoDB utilise un mécanisme de
+liste LRU (<em>Least Recently Used</em>) pour gérer la
+montée et le recyclage des blocs en mémoire. Quand une donnée nécessaire est
+dans un bloc qui se trouve dans le cache, celle-ci est
+remise en tête de la liste. Si le bloc n’est pas dans la liste, il est lu sur
+le disque et monté en tête de la liste; le bloc en fin de liste est alors
+supprimé.</p>
+<p>Puisque InnoDB utilise un mécanisme de cache pour les données,
+ces dernières sont d’abord modifiées dans le cache,
+et se retrouvent alors incohérentes avec
+la version stockée sur disque. On pourrait penser
+à écrire immédiatement pour mettre les deux versions en concordance,
+mais cela entraînerait des entrées/sorties aléatoires très coûteuses.
+La stratégie « paresseuse » consiste donc à attendre
+que le bloc contenant la donnée arrive en bout
+de liste LRU et soit finalement écrit sur le disque.
+Dans l’intervalle entre la mise à jour et l’écriture,
+le disque est une image incohérente des données
+modifiées en cache.</p>
+<p>Un mécanisme est donc nécessaire pour
+reconstruire cette cohérence en cas d’arrêt brutal du serveur prog{mysqld}.
+InnoDB conserve toutes les modifications des enregistrements dans un
+<em>journal  des transactions</em>. Le chapitre <a class="reference internal" href="rp.html#chap-rp"><span class="std std-ref">Reprise sur panne</span></a> détaille les
+mécanismes de reprise sur panne basés sur le journal des transactions.</p>
+<p>Quel moteur choisir?</p>
+<p>Le moteur de stockage doit être choisi en fonction du type d’accès à la base de
+données, des besoins en performances et des exigences transactionnelles.</p>
+<p>Pour les bases de données essentiellement consultées et chargées périodiquement
+par des traitements batches ou des transactions très simples voire atomiques,
+on choisira le moteur MyISAM. Il a un modèle de stockage simple et utilise peu
+d’espace disque, ce qui le rend performant.  Les bases de ce type seront par
+exemple des catalogues, des annuaires ou des bases décisionnelles.</p>
+<p>Pour les bases avec de fortes exigences transactionnelles, c’est-à-dire dont
+les traitements métiers comportent de nombreuses instructions de mise à jour
+avec une exigence forte de cohérence, on choisira le moteur InnoDB qui offre la
+gestion des transactions.
+Par exemple, les bases financières ou de
+gestion de stock nécessitent une cohérence qui justifie l’emploi de InnoDB.</p>
+<p>Par ailleurs, si des requêtes effectuent de nombreuses jointures sur des tables
+de volume important, on pourra choisir le moteur InnoDB. En
+effet, le stockage en cluster sur la clé primaire et
+l’utilisation d’un cache  de données permettent
+d’accélerer les jointures qui concernent beaucoup de lignes. Les traitements de
+reporting ou d’édition massives peuvent en bénéficier.</p>
+<p>Pour toutes les tables qui stockent des données temporairement lors d’un
+traitement, on peut envisager le moteur <code class="docutils literal notranslate"><span class="pre">memory</span></code>. C’est souvent le cas pour
+les chargements et transformations des
+bases de données décisionnelles.</p>
+<p>Pour les données qui ne seront plus modifiées, on pourra utiliser le moteur
+<code class="docutils literal notranslate"><span class="pre">archive</span></code>  qui compresse les données. Il est
+conseillé d’écrire un traitement serveur spécifique pour archiver massivement
+les données qui doivent l’être.  Par exemple, on pourra archiver chaque premier
+du mois les données du mois précédent.</p>
+<p>Il est conseillé de stocker les données sur des systèmes de fichiers dédiés.
+Cela permet de mieux gérer l’espace disque. Pour cela on utilisera des liens
+symboliques. La répartition sur des disques distincts des
+données et des index (possible pour MyISAM, pas pour
+InnoDB), est tout à fait recommandée. Elle est indispensable dans
+le cas des fichiers journaux et des fichiers de données.</p>
+</section>
+</section>
+<section id="s3-sql-server">
+<h2>S3: SQL Server<a class="headerlink" href="#s3-sql-server" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Pas de support écrit, mais
+<a class="reference external" href="http://mdcvideos.cnam.fr/videos/?video=">présentation vidéo par Nicolas Travers</a></p>
+</section>
+<section id="s4-postgres">
+<h2>S4: Postgres<a class="headerlink" href="#s4-postgres" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Pas de support écrit, mais
+<a class="reference external" href="http://mdcvideos.cnam.fr/videos/?video=">présentation vidéo par Nicolas Travers</a></p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">5. Moteurs de stockage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-oracle">S1: Oracle</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fichiers-et-blocs">Fichiers et blocs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#les-tablespaces">Les <em>tablespaces</em></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creation-des-tables">Création des tables</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-mysql">S2: MySQL</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#myisam">MyISAM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#innodb">InnoDB</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-sql-server">S3: SQL Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#s4-postgres">S4: Postgres</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="hachage.html" title="4. Structures d’index: le hachage"
+             >précédent</a> |
+          <a href="opalgo.html" title="6. Opérateurs et algorithmes"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;5. &lt;/span&gt;Moteurs de stockage</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

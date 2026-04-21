@@ -1,0 +1,1301 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>10. Contrôle de concurrence &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="11. Reprise sur panne" href="rp.html" />
+    <link rel="prev" title="9. Transactions" href="transactions.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;10. &lt;/span&gt;Contrôle de concurrence</a></div>
+        <div class="rel">
+          <a href="transactions.html" title="9. Transactions"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="rp.html" title="11. Reprise sur panne"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="controle-de-concurrence">
+<span id="chap-conc"></span><h1><span class="section-number">10. </span>Contrôle de concurrence<a class="headerlink" href="#controle-de-concurrence" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Le contrôle de concurrence est l’ensemble des méthodes mises en œuvre
+par un serveur de bases de données pour assurer le bon comportement
+des transactions, et notamment leur <em>isolation</em>. Les autres propriétés
+désignées par l’acronyme ACID (soit la durabilité et l’atomicité) sont garanties par des techniques de
+reprise sur panne que nous étudierons ultérieurement.</p>
+<p>Les SGBD utilisent essentiellement deux types d’approche pour gérer l’isolation.
+La première s’appuie sur un mécanisme de versionnement des mises à jour successives
+d’un nuplet. On parle de contrôle multiversion ou « d’isolation par cliché » (<em>snapshot isolation</em>
+en anglais).  C’est une méthode satisfaisante jusqu’au niveau d’isolation
+<em>repeatable read</em> car elle impose peu de blocages et assure une bonne fluidité. En revanche
+elle ne suffit pas à garantir une isolation totale, de type <em>serializable</em> (sauf à recourir
+à des algorithmes sophistiqués qui ne semblent pas être encore adoptés dans les systèmes).</p>
+<p>La seconde approche a recours au verrouillage, en lecture et en écriture, et garantit la
+sérialisabilité des exécutions concurrentes, grâce à un algorithme connu et utilisé depuis très longtemps,
+le <em>verrouillage à deux phases</em> (<em>two-phases locking</em>). Le verrouillage
+impacte négativement la fluidité des exécutions, certaines transactions devant être
+mises en attente. Il peut parfois même entraîner un rejet de certaines transactions. C’est
+le prix à payer pour éviter toute anomalie transactionnelle.</p>
+<section id="s1-isolation-par-versionnement">
+<h2>S1: isolation par versionnement<a class="headerlink" href="#s1-isolation-par-versionnement" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slconc-isolmultiversions.pdf">Diapositives: isolation par versionnement</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263e27154a0dzu5zi1/">Vidéo sur l’isolation par versionnement</a></p></li>
+</ul>
+</div>
+<p>Nous avons déjà évoqué à plusieurs reprises le fait qu’un SGBD gère, à certains moments,
+plusieurs versions d’un  même nuplet. C’est clairement le cas pendant le déroulement d’une transaction,
+pour garantir la possibilité d’effectuer des <em>commit/rollback</em>. Le versionnement est utilisé de manière plus générale
+pour garantir l’isolation, au moins jusqu’au niveau <em>repeatable read</em>. C’est ce qui est détaillé dans cette session.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Dans le contexte d’une base relationnelle,
+le mot « donnée » dans ce qui suit désigne toujours un nuplet dans une table.</p>
+</div>
+<section id="versionnement-et-lectures-propres">
+<h3>Versionnement et lectures « propres »<a class="headerlink" href="#versionnement-et-lectures-propres" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Comme vous avez dû le constater pendant la mise en pratique, par exemple avec notre interface en ligne,
+il existe toujours deux choix possibles pour une transaction <span class="math notranslate nohighlight">\(T\)</span> en
+cours : effectuer un <code class="docutils literal notranslate"><span class="pre">commit</span></code> pour valider définitivement
+les opérations effectuées, ou un <code class="docutils literal notranslate"><span class="pre">rollback</span></code> pour les annuler.
+Pour que ces choix soient toujours disponibles, le SGBD
+doit maintenir, pendant l’exécution de <em>T</em>,
+deux versions des données mises à jour :</p>
+<div class="admonition-definition-image-avant-et-image-apres admonition">
+<p class="admonition-title">Définition: image avant et image après</p>
+<p>Le système maintient, pour tout nuplet en cours de modification par une transaction, deux
+versions de ce nuplet:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>une version  <em>après</em> la mise à jour, que nous appellerons <em>l’image après</em>  de ce nuplet;</p></li>
+<li><p>une version  <em>avant</em> la mise à jour, que nous appellerons <em>l’image avant</em> de ce nuplet.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Ces deux images correspondent à deux versions successives du même nuplet,  stockées dans deux espaces de stockage
+séparés (nous étudierons ces espaces de stockage dans le chapitre consacré à la reprise sur panne).
+Le versionnement est donc d’abord une conséquence de la nécessité de pouvoir effectuer
+des <em>commit</em> ou des <em>rollback</em>. Il s’avère également
+très utile pour gérer <em>l’isolation</em> des transactions, grâce à l’algorithme suivant.</p>
+<div class="admonition-algorithme-lectures-propres-et-coherentes admonition">
+<p class="admonition-title">Algorithme: lectures propres et cohérentes</p>
+<p>Soit deux transactions <span class="math notranslate nohighlight">\(T\)</span> et <span class="math notranslate nohighlight">\(T'\)</span>. Leur isolation,
+basée sur ces deux images, s’effectue
+de la manière suivante.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Chaque fois que <em>T</em> effectue la mise à jour d’un nuplet,
+la version courante est d’abord copiée dans l’image avant,
+puis remplacée par la  valeur de l’image après fournie par <em>T</em>.</p></li>
+<li><p>Quand <em>T</em> effectue la lecture de nuplets qu’elle vient
+de modifier, le système doit lire dans l’image après
+pour assurer une vision cohérente de la base, reflétant
+les opérations effectuées par <em>T</em>.</p></li>
+<li><p>En revanche, quand c’est  une autre transaction <em>T”</em> qui demande
+la lecture d’un nuplet en cours de modification par  <em>T</em>, il faut lire dans l’image avant pour éviter
+les effets de lectures sales.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Cet algorithme est illustré par la <a class="reference internal" href="#read-committed"><span class="std std-numref">Fig. 10.1</span></a>. L’espace « après » et « avant » sont
+distingués (attention, il s’agit d’une représentation simplifiée d’espaces de stockage dont
+l’organisation est assez complexe: voir chapitre <a class="reference internal" href="rp.html#chap-rp"><span class="std std-ref">Reprise sur panne</span></a>). Dans l’espace « après » on trouve
+les versions les plus récentes des nuplets de la base: ceux qui on fait l’objet d’un
+<em>commit</em> sont en vert, ceux qui sont en cours de modification sont en rouge.</p>
+<p>L’image avant contient la version précédente de chaque nuplet en cours de modification.
+En l’occurrence, <span class="math notranslate nohighlight">\(e'_2\)</span> est en rouge dans l’image après car il représente
+une version du nuplet <span class="math notranslate nohighlight">\(e_2\)</span> en cours de modification
+par <span class="math notranslate nohighlight">\(T_1\)</span>. La version précédente est en vert dans l’image avant.</p>
+<figure class="align-center" id="id3">
+<span id="read-committed"></span><a class="reference internal image-reference" href="_images/read-committed.png"><img alt="_images/read-committed.png" src="_images/read-committed.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.1 </span><span class="caption-text">Lectures et écritures avec image après et image avant</span><a class="headerlink" href="#id3" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Pour les lectures: <span class="math notranslate nohighlight">\(T_1\)</span> lira  <span class="math notranslate nohighlight">\(e'_2\)</span> qu’elle est en train de modifier,
+dans l’image après,
+pour des raisons de <em>cohérence</em>, alors que  <span class="math notranslate nohighlight">\(T_2\)</span> (ou n’importe quelle autre
+transaction) lira la version <span class="math notranslate nohighlight">\(e_2\)</span> dans l’image avant pour éviter une lecture sale.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On peut se poser la question du nombre de paires image après/avant nécessaires. Que se passe-t-il
+par exemple si <span class="math notranslate nohighlight">\(T_2\)</span> demande la mise à jour d’un nuplet déjà en cours de modification par <span class="math notranslate nohighlight">\(T_1\)</span> ?
+Si cette mise à jour était autorisée, il faudrait créer une troisième version du nuplet, l’image avant de <span class="math notranslate nohighlight">\(T_2\)</span>
+étant l’image après de <span class="math notranslate nohighlight">\(T_1\)</span> (tout le monde suit?). La multiplication des versions rendrait
+la gestion des <code class="docutils literal notranslate"><span class="pre">commit</span></code> et <code class="docutils literal notranslate"><span class="pre">rollback</span></code>
+extrêmement complexe, voire impossible: comment agir dans ce cas pour effectuer un <em>rollback</em> de la
+transaction <span class="math notranslate nohighlight">\(T_1\)</span>? Il faudrait supprimer l’image après de <span class="math notranslate nohighlight">\(T_1\)</span>, et donc l’image avant de <span class="math notranslate nohighlight">\(T_2\)</span>,
+Il n’est pas nécessaire d’aller plus loin pour réaliser que ce casse-tête est insoluble.
+En pratique les systèmes n’autorisent pas les écritures sales, s’appuyant pour contrôler
+cette règle sur des mécanismes de verrouillage exclusif qui
+seront présentés dans ce qui suit.</p>
+</div>
+</section>
+<section id="lectures-repetables">
+<h3>Lectures répétables<a class="headerlink" href="#lectures-repetables" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le mécanisme décrit ci-dessus est suffisant pour assurer un niveau d’isolation de type
+<em>read committed</em>. En effet, toute transaction autre que celle effectuant la modification
+d’un nuplet  doit lire l’image avant, qui est nécessairement
+une version ayant fait l’objet d’un <em>commit</em> (pour les raisons exposées dans la note qui
+précède).  En revanche, ce même mécanisme ne suffit pas pour le niveau
+<em>repeatable read</em>, comme le montre la <a class="reference internal" href="#unrepeatable-read"><span class="std std-numref">Fig. 10.2</span></a>.</p>
+<figure class="align-center" id="id4">
+<span id="unrepeatable-read"></span><a class="reference internal image-reference" href="_images/unrepeatable-read.png"><img alt="_images/unrepeatable-read.png" src="_images/unrepeatable-read.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.2 </span><span class="caption-text">Lecture non répétable après validation par <span class="math notranslate nohighlight">\(T_1\)</span></span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Cette figure montre la situation après que <span class="math notranslate nohighlight">\(T_1\)</span> a validé. La version
+<span class="math notranslate nohighlight">\(e'_2\)</span> fait maintenant partie des nuplets ayant fait l’objet d’un <em>commit</em>
+et  <span class="math notranslate nohighlight">\(T_2\)</span> lit cette version, qui est donc différente de celle à laquelle elle pouvait accéder
+avant le <em>commit</em> de <span class="math notranslate nohighlight">\(T_1\)</span>.
+La lecture est « non répétable », ce qui constitue un défaut d’isolation
+puisque  <span class="math notranslate nohighlight">\(T_2\)</span> constate, en cours d’exécution, l’effet des mises à jour d’une transaction concurrente.</p>
+<p>Les <em>lectures non répétables</em>  sont dues au fait qu’une transaction
+<span class="math notranslate nohighlight">\(T_2\)</span> lit un nuplet <em>e</em> qui a été   modifié par une transaction <span class="math notranslate nohighlight">\(T_1\)</span>  <em>après</em> le début
+de <span class="math notranslate nohighlight">\(T_2\)</span>. Or, quand <span class="math notranslate nohighlight">\(T_1\)</span> modifie <em>e</em>, il existe
+avant la validation deux versions de <em>e</em> : l’image avant
+et l’image après. Il suffirait que <span class="math notranslate nohighlight">\(T_2\)</span> continue à lire  l’image avant, même après que
+<span class="math notranslate nohighlight">\(T_1\)</span> a validé, pour que le
+problème soit résolu. En d’autres termes, ces images avant peuvent être vues, au-delà de leur rôle dans le
+mécanisme des <em>commit/rollback</em>, comme un « cliché » de la base
+pris à un moment donné, et toute transaction ne lit que dans le
+cliché <em>valide</em> au moment où elle a débuté.</p>
+<p>Un peu de réflexion suffit pour se convaincre qu’il n’est pas suffisant
+de conserver une seule version de l’image  avant, mais qu’il faut conserver toutes celles
+qui existaient au moment où la transaction la plus ancienne a débuté.
+De nombreux SGBD (dont ORACLE, PostgreSQL, MySQL/InnoDB) proposent
+un mécanisme de <em>lecture cohérente</em> basé sur ce système
+de versionnement qui s’appuie sur l’algorithme suivant :</p>
+<div class="admonition-algorithme-lectures-repetables admonition">
+<p class="admonition-title">Algorithme: lectures répétables</p>
+<ul class="simple">
+<li><p>chaque transaction <span class="math notranslate nohighlight">\(T_i\)</span> se voit attribuer, quand elle débute,
+une estampille temporelle <span class="math notranslate nohighlight">\(\tau_i\)</span> ;
+chaque valeur d’estampille est unique
+et les valeurs sont croissantes : on garantit
+ainsi un ordre total entre les transactions.</p></li>
+<li><p>chaque version <em>validée</em> d’un nuplet <em>e</em> est de même
+estampillée par le moment <span class="math notranslate nohighlight">\(\tau_e\)</span> de sa validation ;</p></li>
+<li><p>quand <span class="math notranslate nohighlight">\(T_i\)</span> doit lire un nuplet <em>e</em>, le système regarde
+dans l’image après. Si <em>e</em> a été modifié par <span class="math notranslate nohighlight">\(T_i\)</span>
+ou si son estampille est inférieure à <span class="math notranslate nohighlight">\(\tau_i\)</span>,
+le nuplet peut être lu puisqu’il a été validé
+avant le début de <span class="math notranslate nohighlight">\(T_i\)</span>, sinon le système recherche
+dans l’image avant la version de <em>e</em>
+validée et  immédiatement antérieure à <span class="math notranslate nohighlight">\(\tau_i\)</span>.</p></li>
+</ul>
+</div>
+<p>La seule extension nécessaire par rapport à l’algorithme
+précédent est  la non-destruction
+des images avant, même quand la transaction qui
+a modifié le nuplet valide par <code class="docutils literal notranslate"><span class="pre">commit</span></code>. L’image
+avant contient alors toutes les versions successives
+d’un nuplet, marquées par leur estampille temporelle. Seule
+la plus récente de ces versions correspond à une mise
+à jour en cours. Les autres ne servent qu’à assurer
+la cohérence des lectures.</p>
+<p>La  <a class="reference internal" href="#repeatable-read"><span class="std std-numref">Fig. 10.3</span></a> illustre le mécanisme de lecture
+cohérente et répétable. Les nuplets de l’image après sont associés à leur estampille
+temporelle: 6 pour <span class="math notranslate nohighlight">\(e_1\)</span>, 25 pour <span class="math notranslate nohighlight">\(e''_2\)</span>, etc.  On trouve dans l’image avant
+les versions antérieures de ces nuplets: <span class="math notranslate nohighlight">\(e'_2\)</span> avec pour estampille 14, <span class="math notranslate nohighlight">\(e_4\)</span>
+avec pour estampille 7, <span class="math notranslate nohighlight">\(e_2\)</span>, estampille 5.</p>
+<figure class="align-center" id="id5">
+<span id="repeatable-read"></span><a class="reference internal image-reference" href="_images/repeatable-read.png"><img alt="_images/repeatable-read.png" src="_images/repeatable-read.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.3 </span><span class="caption-text">Lectures répétables avec image avant</span><a class="headerlink" href="#id5" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La transaction <span class="math notranslate nohighlight">\(T_{18}\)</span> a débuté à l’instant 18. Elle lit, dans l’image après,
+les nuplets dont l’estampille est inférieure à 18: <span class="math notranslate nohighlight">\(e_1\)</span>, <span class="math notranslate nohighlight">\(e_3\)</span>, <span class="math notranslate nohighlight">\(e'_4\)</span>.
+En revanche elle doit lire dans l’image avant la version de <span class="math notranslate nohighlight">\(e_2\)</span> dont l’estampille est inférieure
+à 18, soit <span class="math notranslate nohighlight">\(e'_2\)</span>.</p>
+<p>La transaction <span class="math notranslate nohighlight">\(T_{10}\)</span> a débuté à l’instant 10. Le même mécanisme s’applique. On constate que
+<span class="math notranslate nohighlight">\(T_{10}\)</span> doit remonter jusqu’à la version de <span class="math notranslate nohighlight">\(e_{2}\)</span> d’estampille 5 pour effectuer
+une lecture cohérente.</p>
+<p>L’image avant contient l’historique
+de toutes les versions successives
+d’un enregistrement, marquées par leur estampille temporelle. Seule
+la plus récente de ces versions correspond à une mise
+à jour en cours. Les autres ne servent qu’à assurer
+la cohérence des lectures.  L’image avant peut donc être vue comme un conteneur des « clichés » de la base
+pris au fil des mises à jour successives. Toute transaction ne lit que dans le
+cliché « valide » au moment où elle a débuté.</p>
+<p>Certaines de ces versions n’ont plus aucune chance
+d’être utilisées : ce sont celles pour lesquelles
+il existe une version plus récente et antérieure à tous les débuts de
+transaction  en cours. Cette propriété
+permet au SGBD d’effectuer un nettoyage
+(<em>garbage collection</em>) des versions devenues inutiles.</p>
+<p>On peut imaginer la difficulté (et donc le coût) pour le système de cette garantie de lecture répétable. Il faut,
+pour une transaction donnée effectuant une lecture, remonter la chaîne des versions successives de chaque nuplet
+jusqu’à trouver la version faisant partie de l’état de la base au moment où la transaction a débuté. Le
+niveau <em>read committed</em> apparaît beaucoup plus simple à garantir, et donc probablement plus efficace.
+L’isolation a un prix, qui résulte de structures de données et d’algorithmes (relativement) sophistiqués.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Quelle affirmation sur l’image avant et l’image après est exacte?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="iavantapres"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après ne contient que des nuplets validés par un <em>commit</em></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’image avant ne contient que des nuplets validés par un <em>commit</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Toutes les lectures se font dans l’image avant</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Toutes les lectures se font dans l’image après</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Dans quel mode a-t-on besoin de conserver plus d’une version dans l’image avant?</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="iavantapres2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> En <code class="docutils literal notranslate"><span class="pre">repeatable</span> <span class="pre">read</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> En <code class="docutils literal notranslate"><span class="pre">read</span> <span class="pre">committed</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> En <code class="docutils literal notranslate"><span class="pre">serializable</span></code></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<ul class="simple">
+<li><p>Jusqu’à quand doit-on garder une version <span class="math notranslate nohighlight">\(e_i\)</span> estampillée à l’instant <span class="math notranslate nohighlight">\(i\)</span></p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="estampilee"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Pour toujours</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Tant que la transaction qui a écrit <span class="math notranslate nohighlight">\(e_i\)</span> est active</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Tant qu’il existe une transaction qui a débuté avant  <span class="math notranslate nohighlight">\(i\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Tant qu’il existe une transaction qui a déjà lu <span class="math notranslate nohighlight">\(e_i\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-la-serialisabilite">
+<h2>S2: la sérialisabilité<a class="headerlink" href="#s2-la-serialisabilite" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slserialisabilite.pdf">Diapositives: la sérialisabilité</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263e271538f2ilau7r/">Vidéo sur la sérialisabilité</a></p></li>
+</ul>
+</div>
+<p>Nous en arrivons maintenant à l’isolation complète des transactions, garantie par le
+niveau <em>serializable</em>. La sérialisabilité est le critère utime de correction pour l’exécution
+concurrente de transactions. Voici sa définition:</p>
+<div class="admonition-definition-de-la-serialisabilite admonition">
+<p class="admonition-title">Définition de la sérialisabilité</p>
+<p>Soit <em>H</em> une exécution concurrente de <em>n</em> transactions <span class="math notranslate nohighlight">\(T_1, \cdots T_n\)</span>. Cette exécution
+est <em>sérialisable</em> si et seulement si, quel que soit l’état initial de la base,
+il existe un ordonnancement <em>H”</em> de <span class="math notranslate nohighlight">\(T_1, \cdots T_n\)</span> tel que
+le résultat de l’exécution de <em>H</em> est  équivalent à celui
+de l’exécution <em>en série</em> des transactions de <em>H”</em>.</p>
+</div>
+<p>En d’autres termes: si <em>H</em>, constitué d’une imbrication des opérations de <span class="math notranslate nohighlight">\(T_1, \cdots T_n\)</span>,
+est sérialisable, alors le résultat aurait pu être obtenu par une exécution <em>en série</em> des transactions,
+pour au moins un ordonnancement.
+Au cours d’une exécution <em>en série</em>, chaque transaction est seule à accéder à la base au moment
+où elle se déroule, et l’isolation est, par définition, totale.</p>
+<p>Relisez bien cette définition jusqu’à l’assimiler et en comprendre les détails.
+Le but du contrôle de concurrence
+va consister à n’autoriser que les exécutions concurrentes sérialisables, en retardant si nécessaire l’exécution
+de certaines des transactions.</p>
+<p>Notez que la définition ci-dessus est de nature <em>déclarative</em>: elle nous
+donne le sens de la notion de sérialisabilité, mais ne nous fournit aucun moyen pratique de vérifier
+qu’une exécution est sérialisable. On ne peut pas en effet se permettre de vérifier, à chaque étape d’une exécution
+concurrente, s’il existe un ordonnancement donnant un résultat équivalent. Il nous faut donc des conditions
+plus facile à mettre en œuvre: elles reposent sur la notion de <em>conflit</em> et sur le <em>graphe de sérialisabilité</em>.</p>
+<section id="conflits-et-graphe-de-serialisation">
+<h3>Conflits et graphe de sérialisation<a class="headerlink" href="#conflits-et-graphe-de-serialisation" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La notion de base pour tester la sérialisabilité est celle de <em>conflits</em> entre deux
+opérations</p>
+<div class="admonition-definition-conflit-entre-operations-d-une-execution-concurrente admonition">
+<p class="admonition-title"><strong>Définition</strong>: conflit entre opérations d’une exécution concurrente.</p>
+<p>Deux opérations  <span class="math notranslate nohighlight">\(p_i[x]\)</span> et <span class="math notranslate nohighlight">\(q_j[y]\)</span>, provenant de deux transactions
+distinctes <span class="math notranslate nohighlight">\(T_i\)</span> et <span class="math notranslate nohighlight">\(T_j\)</span> (<span class="math notranslate nohighlight">\(i \not= j\)</span>), sont
+<em>en conflit</em> si et seulement si elles portent sur le même
+nuplet (<span class="math notranslate nohighlight">\(x=y\)</span>), et <em>p</em> ou (non exclusif) <em>q</em> est une écriture.</p>
+</div>
+<p>On étend facilement cette définition aux exécutions concurrentes :
+deux transactions dans une exécution sont en <em>conflit</em> si
+elles accèdent au même nuplet et si un de ces accès au moins
+est une écriture.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title"><strong>Exemple</strong>.</p>
+<p>Reprenons une nouvelle fois l’exemple des mises à jour perdues.</p>
+<div class="math notranslate nohighlight">
+\[r_1(s)  r_1(c_1) r_2(s)  r_2(c_2)  w_2(s)  w_2(c_2) w_1(s) w_1(c_1)\]</div>
+<p>L’exécution correspond
+à deux transactions <span class="math notranslate nohighlight">\(T_1\)</span> et <span class="math notranslate nohighlight">\(T_2\)</span>, accédant
+aux données <em>s</em>, <span class="math notranslate nohighlight">\(c_1\)</span> et <span class="math notranslate nohighlight">\(c_2\)</span>. Les conflits sont
+les suivants :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(r_1(s)\)</span> et <span class="math notranslate nohighlight">\(w_2(s)\)</span> sont en conflit ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(r_2(s)\)</span> et <span class="math notranslate nohighlight">\(w_1(s)\)</span> sont en conflit.</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_2(s)\)</span> et <span class="math notranslate nohighlight">\(w_1(s)\)</span> sont en conflit.</p></li>
+</ul>
+</div></blockquote>
+<p>Noter que <span class="math notranslate nohighlight">\(r_1(s)\)</span> et <span class="math notranslate nohighlight">\(r_2(s)\)</span> <em>ne sont  pas</em> en conflit,
+puisque ce sont deux lectures. Il n’y a pas de conflit sur
+<span class="math notranslate nohighlight">\(c_1\)</span> et <span class="math notranslate nohighlight">\(c_2\)</span>.</p>
+</div>
+<p>Les conflits permettent de définir une relation entre les
+transactions d’une exécution concurrente.</p>
+<div class="admonition-definition admonition">
+<p class="admonition-title"><strong>Définition</strong>.</p>
+<p>Soit <em>H</em> une exécution concurrente d’un ensemble de transactions <span class="math notranslate nohighlight">\(T = \{T_1, T_2, \cdots, T_n\}\)</span>.
+Alors il existe une relation <span class="math notranslate nohighlight">\(\lhd\)</span> sur cet ensemble, définie par :</p>
+<div class="math notranslate nohighlight">
+\[T_i \lhd T_j \Leftrightarrow \exists p \in T_i, q \in T_j, p\ \rm{est\ en\ conflit\ avec} \ q\ et\ p &lt;_H q\]</div>
+<p>où <span class="math notranslate nohighlight">\(p &lt;_H q\)</span> indique que <em>p</em> apparaît avant <em>q</em> dans <em>H</em>.</p>
+</div>
+<p>Dans l’exemple qui précèdent, on a donc <span class="math notranslate nohighlight">\(T_1 \lhd T_2\)</span>,
+ainsi que <span class="math notranslate nohighlight">\(T_2 \lhd T_1\)</span>.</p>
+<p>Une transaction <span class="math notranslate nohighlight">\(T_i\)</span> peut
+ne pas être en relation (directe) avec une transaction <span class="math notranslate nohighlight">\(T_j\)</span>.</p>
+</section>
+<section id="condition-de-serialisabilite">
+<h3>Condition de sérialisabilité<a class="headerlink" href="#condition-de-serialisabilite" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La condition sur la sérialisabilité
+s’exprime sur le graphe de la relation <span class="math notranslate nohighlight">\((T, \lhd)\)</span>,
+dit
+<em>graphe de sérialisation</em> :</p>
+<div class="admonition-theoreme-de-serialisabilite admonition">
+<p class="admonition-title"><strong>Théorème de sérialisabilité</strong>.</p>
+<p>Soit <em>H</em> une exécution concurrente d’un ensemble de transactions
+<span class="math notranslate nohighlight">\(\cal T\)</span>. Si le graphe de <span class="math notranslate nohighlight">\(({\cal T}, \lhd)\)</span> est acyclique,
+alors <em>H</em> est sérialisable.</p>
+</div>
+<p>La  <a class="reference internal" href="#graphe-serial"><span class="std std-numref">Fig. 10.4</span></a> montre quelques exemples
+de graphes de sérialisation. Le premier
+correspond aux exemples données ci-dessus : il
+est clairement cyclique. Le second n’est pas
+cyclique et correspond donc à une exécution sérialisable. Le
+troisième  est cyclique.</p>
+<figure class="align-center" id="id6">
+<span id="graphe-serial"></span><a class="reference internal image-reference" href="_images/graphe-serial.png"><img alt="_images/graphe-serial.png" src="_images/graphe-serial.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.4 </span><span class="caption-text">Exemples de graphes de sérialisation</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Un algorithme de contrôle de concurrence a donc pour
+objectif d’éviter la formation d’un cycle dans le graphe
+de sérialisation. C’est une condition pratique qu’il est envisageable de vérifier
+pendant le déroulement d’une exécution. Il existe en fait deux grandes familles
+de contrôle de concurrence:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>les algorithmes dits « optimistes » surveillent les conflits en intervenant au minimum sur
+le déroulement des transactions, et rejettent une transaction
+quand un cycle apparaît;</p></li>
+<li><p>les algorithmes dits « pessimistes » effectuent des verrouillages et blocages pour tenter de
+prévenir l’apparition de cycle dans le graphe de sérialisation.</p></li>
+</ul>
+</div></blockquote>
+<p>Les sessions qui suivent présentent deux algorithmes très répandus: le contrôle multiversions,
+optimiste, dont la version de base (que nous présentons) ne garantit pas
+totalement la sérialisabilité, et le verrouillage à deux phases, plutôt de nature pessimiste,
+le plus utilisé quand la sérialisabilité stricte est requise.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>(Parenthèse pour ceux qui veulent tout savoir). Dans l’idéal, la condition sur
+le graphe des conflits caractériserait <em>exactement</em>
+les exécutions sérialisables et ontrouverait un « si et seulement si »
+dans l’énoncé du théorème.. Ce n’est pas tout à fait le cas. Tester qu’une exécution
+a un graphe des conflits cyclique (appelons ces exécutions <em>conflit sérialisables</em>)
+est une condition <em>suffisante</em> mais pas <em>nécessaire</em>. Certaines exécutions (très rares) peuvent être
+sérialisables avec un graphe de conflits cyclique. En d’autres termes, un système qui fonctionne
+avec le graphe des conflits rejette (un peu) trop de transactions.</p>
+<p>L’alternative serait d’effectuer un ensemble de vérifications complexes, dont je préfère
+ne pas vous donner la liste.
+Les exécutions qui satisfont ces vérifications sont appelées <em>vue sérialisables</em> dans les
+manuels traitant de manière approfondie de la concurrence. La vue-sérialisabilité
+est une condition nécessaire <em>et</em> suffisante, et  caractérise exactement la sérialisabilité.</p>
+<p>Tester la vue-sérialisabilité est très complexe, beaucoup plus complexe
+que le test sur le graphe des conflits. Les systèmes appliquent donc la seconde
+et tout le monde est content, les scientifiques et les praticiens. Fin de la parenthèse.</p>
+</div>
+</section>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Supposons une table <em>T(id, valeur)</em>, et la procédure suivante qui
+copie la valeur d’une ligne vers la valeur d’une autre:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span> <span class="cm">/* Une procédure de copie */</span>
+
+ <span class="k">create</span> <span class="k">or</span> <span class="k">replace</span> <span class="k">procedure</span> <span class="n">Copie</span> <span class="p">(</span><span class="n">id1</span> <span class="nb">INT</span><span class="p">,</span> <span class="n">id2</span> <span class="nb">INT</span><span class="p">)</span> <span class="k">AS</span>
+
+  <span class="c1">-- Déclaration des variables</span>
+  <span class="n">val</span> <span class="nb">INT</span><span class="p">;</span>
+
+  <span class="k">BEGIN</span>
+    <span class="c1">-- On recherche la valeur de id1</span>
+    <span class="k">SELECT</span> <span class="o">*</span> <span class="k">INTO</span> <span class="n">val</span> <span class="k">FROM</span> <span class="n">T</span> <span class="k">WHERE</span> <span class="n">id</span> <span class="o">=</span> <span class="n">id1</span>
+
+    <span class="c1">-- On copie dans la ligne id2</span>
+    <span class="k">UPDATE</span> <span class="n">T</span> <span class="k">SET</span> <span class="n">valeur</span> <span class="o">=</span> <span class="n">val</span> <span class="k">WHERE</span> <span class="n">id</span> <span class="o">=</span> <span class="n">id2</span>
+
+    <span class="c1">-- Validation</span>
+    <span class="k">commit</span><span class="p">;</span>
+ <span class="k">END</span><span class="p">;</span>
+<span class="o">/</span>
+</pre></div>
+</div>
+<p>On prend deux transactions <em>Copie(A, B)</em> et <em>Copie(B,A)</em>, l’une copiant de la
+ligne <em>A</em> vers la ligne <em>B</em> et l’autre effectuant la copie inverse. Initialement, la
+valeur de <em>A</em> est <em>a</em> et la valeur de <em>B</em> est <em>b</em>. Qu’est-ce qui
+caractérise une exécution sérialisable de ces deux transactions?</p>
+<div class="reauthoring_embedded_quiz" id="defSerial1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>A</em> et <em>B</em> valent <em>a</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>A</em> et <em>B</em> valent <em>b</em></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <em>A</em> et <em>B</em> ont la même valeur</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>A</em> vaut <em>b</em> et  <em>B</em> vaut  <em>a</em></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Voici une exécution concurrente de deux transactions de réservation.</p>
+<blockquote>
+<div><blockquote>
+<div><div class="math notranslate nohighlight">
+\[r_1(s)  r_1(c_1) w_1(s) r_2(s) r_2(c_2) w_2(s) w_1(c_1) w_2(c_2)\]</div>
+</div></blockquote>
+<p>Quelles sont les opérations en conflit?</p>
+<div class="reauthoring_embedded_quiz" id="conflitTrans1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(r_1(s)\)</span> et <span class="math notranslate nohighlight">\(r_2(s)\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(r_1(s)\)</span> et <span class="math notranslate nohighlight">\(w_2(s)\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img><span class="math notranslate nohighlight">\(w_1(s)\)</span> et <span class="math notranslate nohighlight">\(w_2(s)\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img><span class="math notranslate nohighlight">\(r_2(c_2)\)</span> et <span class="math notranslate nohighlight">\(w_2(c_2)\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Voici une exécution concurrente de <em>Copie(A, B)</em> et <em>Copie(B,A)</em></p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[r_1(v_1)  r_2(v_2) w_1(v_2) w_2(v_1)\]</div>
+</div></blockquote>
+<p>Est-elle sérialisable, d’après les conflits et le graphe?</p>
+<div class="reauthoring_embedded_quiz" id="serial2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s3-controle-de-concurrence-multi-versions">
+<span id="sec-multiversions"></span><h2>S3: Contrôle de concurrence multi-versions<a class="headerlink" href="#s3-controle-de-concurrence-multi-versions" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slccmultiversions.pdf">Diapositives: contrôle de concurrence multiversions</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc99deb557xunjm/">Vidéo sur le contrôle de concurrence multiversions</a></p></li>
+</ul>
+</div>
+<p>Le contrôle de concurrence multiversions (<em>isolation snapshot</em>)
+permet une gestion relativement simple de l’isolation, au prix d’un verrouillage
+minimal. Même s’il ne garantit pas une sérialisabilité totale, c’est une solution
+adoptée par de nombreux systèmes transactionnels (par seulement des SGBD d’ailleurs).
+La méthode s’appuie essentiellement sur un versionnement des données (voir ci-dessus),
+et sur des vérifications de cohérence entre les versions
+lues et celles corrigéees par une même transaction.</p>
+<p>L’algorithme tire parti du fait que les lectures s’appuient
+toujours sur une version cohérente (le « cliché ») de la base.
+Tout se passe comme si les lectures effectuées par une transaction <span class="math notranslate nohighlight">\(T(t_{0})\)</span>
+débutant à l’instant <span class="math notranslate nohighlight">\(t_0\)</span> lisaient la base, dès le début de la
+transaction, donc dans l’état  <span class="math notranslate nohighlight">\(t_0\)</span>.
+Cette remarque réduit considérablement les cas possibles
+de conflits et surtout de cycles entre conflits.</p>
+<section id="les-possibilites-de-conflit">
+<h3>Les possibilités de conflit<a class="headerlink" href="#les-possibilites-de-conflit" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Prenons
+une lecture <span class="math notranslate nohighlight">\(r_1[d]\)</span> effectuée par la transaction <span class="math notranslate nohighlight">\(T_1(t_0)\)</span>.
+Cette lecture accède à la version <em>validée</em>
+la plus récente de <em>d</em> qui précède <span class="math notranslate nohighlight">\(t_0\)</span>, par définition de l’état
+de la base à <span class="math notranslate nohighlight">\(t_0\)</span>. Deux cas de conflits sont envisageables :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(r_1[d]\)</span> est en conflit avec une écriture <span class="math notranslate nohighlight">\(w_2[d]\)</span>
+qui a eu lieu <em>avant</em>   <span class="math notranslate nohighlight">\(t_0\)</span> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(r_1[d]\)</span> est en conflit avec une écriture <span class="math notranslate nohighlight">\(w_2[d]\)</span>
+qui a eu lieu <em>après</em> <span class="math notranslate nohighlight">\(t_0\)</span>.</p></li>
+</ul>
+</div></blockquote>
+<p>Dans le premier cas, <span class="math notranslate nohighlight">\(T_2\)</span>   a forcément effectué son <code class="docutils literal notranslate"><span class="pre">commit</span></code> avant <span class="math notranslate nohighlight">\(t_0\)</span>,
+puisque <span class="math notranslate nohighlight">\(T_1\)</span> lit l’état de la base à <span class="math notranslate nohighlight">\(t_0\)</span> :
+tous les conflits de <span class="math notranslate nohighlight">\(T_1\)</span> avec <span class="math notranslate nohighlight">\(T_2\)</span> sont dans le même sens (de fait,
+<span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_1\)</span> s’exécutent en série), et
+il n’y a pas de risque de cycle (<a class="reference internal" href="#cc-multiversions1"><span class="std std-numref">Fig. 10.5</span></a>).</p>
+<figure class="align-center" id="id7">
+<span id="cc-multiversions1"></span><a class="reference internal image-reference" href="_images/cc-multiversions.png"><img alt="_images/cc-multiversions.png" src="_images/cc-multiversions.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.5 </span><span class="caption-text">Contrôle de concurrence multi-versions : conflit  avec les écritures précédentes</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le second cas est celui qui peut poser problème. Notez tout d’abord
+qu’une nouvelle lecture de <em>d</em> par <span class="math notranslate nohighlight">\(T_1\)</span> n’introduit pas de cycle puisque
+toute lecture s’effectue à <span class="math notranslate nohighlight">\(t_0\)</span>. En revanche, si <span class="math notranslate nohighlight">\(T_1\)</span> cherche
+à écrire <em>d</em> après l’écriture <span class="math notranslate nohighlight">\(w_2[d]\)</span>, alors un conflit
+cyclique apparaît (<a class="reference internal" href="#cc-multiversions2"><span class="std std-numref">Fig. 10.6</span></a>).</p>
+<figure class="align-center" id="id8">
+<span id="cc-multiversions2"></span><a class="reference internal image-reference" href="_images/cc-multiversions2.png"><img alt="_images/cc-multiversions2.png" src="_images/cc-multiversions2.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 10.6 </span><span class="caption-text">Contrôle de concurrence multi-versions : conflit  avec une écriture d’une autre transaction.</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le contrôle de concurrence peut alors se limiter
+à vérifier, au moment
+de l’écriture d’un nuplet <em>d</em> par une transaction <em>T</em>, qu’aucune
+transaction <em>T”</em> n’a modifié <em>d</em> entre le début de <em>T</em> et l’instant
+présent.  Si on autorisait la modification de <em>d</em> par <em>T</em>,
+un cycle apparaîtrait dans le graphe de sérialisation.  En d’autres termes, <em>une
+mise à jour n’est possible que si la partie de la base à modifier n’a
+pas changé depuis que *T</em> a commencé à s’exécuter*.</p>
+</section>
+<section id="l-algorithme">
+<h3>L’algorithme<a class="headerlink" href="#l-algorithme" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Rappelons que pour chaque transaction <span class="math notranslate nohighlight">\(T_i\)</span> on
+connaît son estampille temporelle de début d’exécution <span class="math notranslate nohighlight">\(\tau_i\)</span>; et pour
+chaque version d’un nuplet <em>e</em> son estampille de validation <span class="math notranslate nohighlight">\(\tau_e\)</span>.
+Le contrôle de concurrence multi-versions s’appuie sur la capacité pour une transaction de
+<em>verrouiller</em> une version, auquel cas aucune autre transaction ne peut y accéder
+jusqu’à ce que les verrous soient levés par le <em>commit</em> ou le <em>rollback</em> de la transaction
+verrouillante.</p>
+<div class="admonition-algorithme-de-controle-de-concurrence-multiversions admonition">
+<p class="admonition-title">Algorithme de contrôle de concurrence multiversions</p>
+<ul class="simple">
+<li><p>toute lecture <span class="math notranslate nohighlight">\(r_i[e]\)</span> lit la plus récente
+version de <em>e</em> telle que <span class="math notranslate nohighlight">\(\tau_e \leq \tau_i\)</span>; aucun contrôle ou verrouillage n’est effectué;</p></li>
+<li><dl class="simple">
+<dt>en cas d’écriture <span class="math notranslate nohighlight">\(w_i[e]\)</span>,</dt><dd><ul>
+<li><p>si <span class="math notranslate nohighlight">\(\tau_e \leq \tau_i\)</span> et aucun verrou n’est posé sur <em>e</em> :
+<span class="math notranslate nohighlight">\(T_i\)</span> pose un verrou exclusif sur <em>e</em>, et effectue la mise à jour ;</p></li>
+<li><p>si <span class="math notranslate nohighlight">\(\tau_e \leq \tau_i\)</span> et un verrou est posé sur <em>e</em> :
+<span class="math notranslate nohighlight">\(T_i\)</span> est mise en attente ;</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>si <span class="math notranslate nohighlight">\(\tau_e &gt; \tau_i\)</span>, <span class="math notranslate nohighlight">\(T_i\)</span> est rejetée.</p></li>
+<li><p>au moment du <code class="docutils literal notranslate"><span class="pre">commit</span></code> d’une transaction <span class="math notranslate nohighlight">\(T_i\)</span>,  tous les enregistrements modifiés par
+<span class="math notranslate nohighlight">\(T_i\)</span> obtiennent
+une nouvelle version avec pour estampille l’instant du <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p></li>
+</ul>
+</div>
+<p>Avec cette technique, on peut ne pas poser de verrou au moment des opérations de lecture,
+ce qui est souvent présenté comme un argument fort par rapport au verrouillage à deux phases
+qui sera étudié plus loin. En revanche les verrous
+sont toujours indispensables pour les écritures, afin d’éviter lectures ou écritures sales.</p>
+<p>Voici un déroulé de cette technique, toujours
+sur notre exemple d’une exécution concurrente
+du programme de réservation avec l’ordre suivant :</p>
+<div class="math notranslate nohighlight">
+\[r_1(s)  r_1(c_1) r_2(s)  r_2(c_2)  w_2(s)  w_2(c_2) C_2 w_1(s) w_1(c_1) C_1\]</div>
+<p>On suppose que <span class="math notranslate nohighlight">\(\tau_1 = 100\)</span>,  <span class="math notranslate nohighlight">\(\tau_2 = 120\)</span>.
+On va considérer également qu’une opération est effectuée toutes les 10
+unités de temps, même si seul l’ordre compte, et pas le délai
+entre deux opérations. Le déroulement
+de l’exécution est donc le suivant :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> lit <em>s</em>, sans verrouiller ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> lit <span class="math notranslate nohighlight">\(c_1\)</span>, sans verrouiller ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> lit <em>s</em>, sans verrouiller ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> <span class="math notranslate nohighlight">\(c_2\)</span>, sans verrouiller ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> veut modifier <em>s</em> : l’estampille de <em>s</em>
+est inférieure à  <span class="math notranslate nohighlight">\(\tau_2 = 120\)</span>, ce qui signifie
+que <em>s</em> n’a pas été modifié par une autre transaction depuis que
+<span class="math notranslate nohighlight">\(T_2\)</span> a commencé à s’exécuter; on
+pose un verrou  sur <em>s</em> et on effectue
+la modification :</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> modifie <span class="math notranslate nohighlight">\(c_2\)</span>, avec pose d’un verrou ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> valide et relâche les verrous ;
+deux nouvelles versions de
+<em>s</em> et <span class="math notranslate nohighlight">\(c_2\)</span> sont  créées avec l’estampille <em>150</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> veut à son tour modifier <em>s</em>, mais
+cette fois le contrôleur détecte qu’il existe
+une version de <em>s</em> avec <span class="math notranslate nohighlight">\(\tau_s &gt; \tau_1\)</span>, donc que <em>s</em>
+a été modifié après le début de <span class="math notranslate nohighlight">\(T_1\)</span>.
+Le contrôleur doit donc rejeter <span class="math notranslate nohighlight">\(T_1\)</span> sous peine d’autoriser un cycle
+et donc d’obtenir une exécution non sérialisable.</p></li>
+</ul>
+</div></blockquote>
+<p>On obtient le
+rejet de l’une des deux transactions avec un contrôle <em>à postériori</em>, d’où l’expression
+« approche optimiste » exprimant  l’idée que
+la  technique choisit de laisser faire
+et d’intervenir seulement quand les conflits cycliques interviennent réellement.</p>
+</section>
+<section id="limites-de-l-algorithme">
+<h3>Limites de l’algorithme<a class="headerlink" href="#limites-de-l-algorithme" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’algorithme de contrôle multiversions est réputé efficace, plus efficace que le
+traditionnel verrouillage à deux phases. La comparaison est cependant biaisée car
+le contrôle multiversions  ne garantit pas la sérialisabilité dans tous les cas, comme le montre
+l’exemple très simple qui suit. On reprend la procédure de copie d’une ligne à l’autre dans
+la table <em>T</em>, et l’exécution concurrente de deux transactions issues de cette procédure.</p>
+<div class="math notranslate nohighlight">
+\[r_1(v_1)  r_2(v_2) w_1(v_2) w_2(v_1)\]</div>
+<p>Vous devriez déjà être convaincu que cette exécution n’est pas sérialisable. Si on la soumet
+à l’algorithme de contrôle de concurrence multi-version, un rejet de l’une des transactions
+devrait dont survenir. Or, il est facile de vérifier que</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>La valeur <span class="math notranslate nohighlight">\(v_1\)</span> est lue, pas de contrôle ni de verrouillage.</p></li>
+<li><p>La valeur <span class="math notranslate nohighlight">\(v_2\)</span> est lue, pas de contrôle ni de verrouillage.</p></li>
+<li><p>La valeur <span class="math notranslate nohighlight">\(v_2\)</span> est modifiée sans obstacle, car aucune
+mise à jour de <span class="math notranslate nohighlight">\(v_2\)</span> n’a eu lieu depuis le début de l’exécution.</p></li>
+<li><p>Même chose pour <span class="math notranslate nohighlight">\(v_1\)</span>.</p></li>
+</ul>
+</div></blockquote>
+<p>Donc, tout se déroule sans obstacle, et la non-sérialisabilité n’est pas détectée. À la fin de l’exécution,
+les valeurs de <em>A</em> et <em>B</em> diffèrent alors qu’elles devraient être égales. Cet algorithme n’est pas d’une correction
+absolue, même s’il détecte la plupart des situations non-sérialiables, y compris notre exemple prototypique
+des mises à jour perdues.</p>
+<p>Des travaux de recherche ont proposé des améliorations garantissant la sérialisabilité stricte, mais
+elles ne semblent pas encore intégrées aux systèmes qui s’appuient sur la solution éprouvée du verrouillage
+à deux phases, présenté ci-dessous.</p>
+</section>
+</section>
+<section id="s4-le-verrouillage-a-deux-phases">
+<h2>S4: le verrouillage à deux phases<a class="headerlink" href="#s4-le-verrouillage-a-deux-phases" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sl2pl.pdf">Diapositives: verrouillage à deux phases</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc98fc44cwb33xc/">Vidéo sur le verrouillage à deux phases</a></p></li>
+</ul>
+</div>
+<p>L’algorithme de verrouillage à deux phases (que nous simplifierons en 2PL pour <em>2 phases locking</em>)
+est le plus ancien, et toujours le plus utilisé des
+méthodes de contrôle de concurrence assurant la sérialisabilité stricte. Il a la réputation
+d’induire beaucoup de blocages, voire d’interblocages, ainsi que des rejets de transactions. Comme nous
+l’avons indiqué à de très nombreuses reprises, aucune solution n’est idéale et il faut faire un choix
+entre le risque d’anomalies ponctuelles et imprévisibles, et des blocages et rejets tout aussi ponctuels
+et imprévisibles mais assurant la correction des exécutions concurrentes.</p>
+<p>L’algorithme lui-même est relativement simple. Il s’appuie sur des méthodes de verrouillage
+qui sont présentées en premier lieu.</p>
+<section id="verrouillage">
+<h3>Verrouillage<a class="headerlink" href="#verrouillage" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le 2PL est basé sur le
+<em>verrouillage</em> des nuplets lus ou mis à jour. L’idée
+est simple : chaque transaction désirant lire
+ou écrire un nuplet doit auparavant obtenir un verrou
+sur ce nuplet.  Une fois obtenu (sous certaines conditions
+explicitées ci-dessous), le verrou reste détenu
+par la transaction qui l’a posé, jusqu’à
+ce que cette transaction décide de relâcher le verrou.</p>
+<p>Le 2PL gère deux types de verrous :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>les <em>verrous partagés</em>  autorisent la pose d’autres verrous partagés sur le même nuplet.</p></li>
+<li><p>les <em>verrous exclusifs</em> interdisent
+la pose de tout autre verrou, exclusif ou partagé,
+et donc de toute lecture ou écriture par une autre
+transaction.</p></li>
+</ul>
+</div></blockquote>
+<p>On ne peut poser un verrou partagé que s’il n’y a que des verrous partagés sur le nuplet.
+On ne peut poser un verrou exclusif que s’il n’y a aucun autre verrou, qu’il soit exclusif ou partagé.
+Les verrous sont posés par chaque transaction, et ne sont libérés qu’au moment du <code class="docutils literal notranslate"><span class="pre">commit</span></code> ou
+<code class="docutils literal notranslate"><span class="pre">rollback</span></code>.</p>
+<p>Dans ce qui suit les  verrous en lecture  seront notés <em>rl</em> (comme <em>read lock</em>),
+et les verrous en écritures seront notés <em>wl</em> (comme
+<em>write lock</em>). Donc <span class="math notranslate nohighlight">\(rl_i[x]\)</span> indique par exemple que la
+transaction <em>i</em> a posé un verrou en lecture sur la resource <em>x</em>.
+On notera de même <em>ru</em> et <em>wu</em> le relâchement des verrous (<em>read unlock</em> et
+<em>write unlock</em>).</p>
+<p>Il ne peut y avoir qu’un seul verrou exclusif sur un nuplet.
+Son obtention par une transaction <em>T</em>
+suppose donc qu’il n’y ait aucun verrou déjà posé
+par une autre transaction <em>T”</em>.
+En revanche il peut y avoir plusieurs verrous partagés :
+l’obtention d’un verrou partagé est possible sur
+un nuplet tant que ce nuplet n’est pas verrouillé exclusivement
+par une autre transaction. Enfin, si une transaction
+est la seule à détenir un verrou partagé sur un nuplet,
+elle peut « promouvoir » ce verrou en un verrou exclusif.</p>
+<p>Si une transaction ne parvient pas à obtenir un verrou,
+elle est mise en attente, <em>ce qui signifie que la transaction
+s’arrête complètement jusqu’à ce que le verrou soit obtenu</em>. Rappelons
+qu’une transaction est une séquence d’opérations, et qu’il n’est
+évidemment pas question de changer l’ordre, ce qui reviendrait
+à modifier la sémantique du programme. Quand une opération
+ne peut pas s’exécuter car le verrou correspondant ne peut pas être posé,
+elle est mise en attente ainsi
+que toutes celles qui la suivent pour la même transaction.</p>
+<p>Les verrous sont posés de manière automatique par le SGBD en fonction
+des opérations effectuées par les transactions/utilisateurs.
+Il est également possible de demander explicitement le verrouillage
+de certaines ressources (nuplet ou même table) (cf. chapitre
+d’introduction à la concurrence).</p>
+<p>Tous les SGBD proposent un verrouillage au niveau du nuplet, et privilégient
+les verrous partagés tant que cela ne remet pas en cause
+la correction des exécutions concurrentes. Un verrouillage
+au niveau du nuplet est considéré comme moins pénalisant pour
+la fluidité, puisqu’il laisse libres d’autres transactions
+d’accéder à tous les autres nuplets non verrouillés. Il
+existe cependant des cas où cette méthode est inappropriée. Si
+par exemple un programme parcourt une table avec un curseur
+pour modifier chaque nuplet, et valide à la fin, on va poser
+un verrou sur chaque nuplet alors qu’on aurait obtenu un résultat
+équivalent avec un seul verrou au niveau de la table.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Certains SGBD pratiquent également <em>l’escalade des verrous</em> : quand plus
+d’une certaine fraction des nuplets d’une table est verrouillée,
+le SGBD passe automatiquement à un verrouillage au niveau de la table.
+Sinon on peut envisager, en tant que programmeur,
+la pose  explicite d’un verrou
+exclusif sur la table à modifier au début du programme. Ces méthodes
+ne sont pas abordées ici: à vous de voir, une fois les connaissances fondamentales
+acquises, comment gérer au mieux votre application avec les outils proposés
+par votre SGBD.</p>
+</div>
+</section>
+<section id="controle-par-verrouillage-a-deux-phases">
+<h3>Contrôle par verrouillage à deux phases<a class="headerlink" href="#controle-par-verrouillage-a-deux-phases" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le verrouillage à deux phases est le protocole le plus ancien
+pour assurer des exécutions concurrentes correctes.
+Le respect du protocole est assuré par un module dit <em>ordonnanceur</em>
+qui reçoit les opérations émises par les transactions
+et les traite selon l’algorithme suivant :</p>
+<blockquote>
+<div><ul>
+<li><p>L’ordonnanceur reçoit <span class="math notranslate nohighlight">\(p_i[x]\)</span> et consulte le verrou déjà posé sur <em>x</em>, <span class="math notranslate nohighlight">\(ql_j[x]\)</span>,
+s’il existe.</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>si <span class="math notranslate nohighlight">\(pl_i[x]\)</span> est en conflit avec <span class="math notranslate nohighlight">\(ql_j[x]\)</span>, <span class="math notranslate nohighlight">\(p_i[x]\)</span> est retardée et la transaction <span class="math notranslate nohighlight">\(T_i\)</span>  est mise en attente.</p></li>
+<li><p>sinon, <span class="math notranslate nohighlight">\(T_i\)</span> obtient le verrou <span class="math notranslate nohighlight">\(pl_i[x]\)</span> et  l’opération <span class="math notranslate nohighlight">\(p_i[x]\)</span> est exécutée.</p></li>
+</ol>
+</div></blockquote>
+</li>
+<li><p>les verrous ne sont relâchés qu’au moment    du <code class="docutils literal notranslate"><span class="pre">commit</span></code> ou du <code class="docutils literal notranslate"><span class="pre">rollback</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<p>Le terme « verrouillage à deux phases » s’explique par le processus
+détaillé ci-dessus : il y a d’abord <em>accumulation</em> de verrous
+pour une transaction <em>T</em>, puis <em>libération</em> des verrous
+à la fin de la transaction.
+Les transactions obtenues par application de cet algorithme
+sont sérialisables. Il est assez facile de voir
+que les lectures ou écritures sales sont interdites, puisque
+toutes deux reviennent à tenter de lire ou d’écrire un nuplet
+déjà écrit par une autre, et donc verrouillé exclusivement
+par l’algorithme.</p>
+<p>Le protocole garantit que, en présence de deux transactions en conflit <span class="math notranslate nohighlight">\(T_1\)</span> et
+<span class="math notranslate nohighlight">\(T_2\)</span>, la dernière arrivée sera mise en attente de la première ressource
+conflictuelle et sera bloquée jusqu’à ce que la première commence à relâcher
+ses verrous (règle 1).  À ce moment là il n’y a plus de conflit possible
+puisque <span class="math notranslate nohighlight">\(T_1\)</span> ne demandera plus de verrou.</p>
+</section>
+<section id="quelques-exemples">
+<h3>Quelques exemples<a class="headerlink" href="#quelques-exemples" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Prenons pour commencer l’exemple
+des deux transactions suivantes :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1: r_1[x]  w_1[y]  C_1\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2: w_2[x]  w_2[y] C_2\)</span></p></li>
+</ul>
+</div></blockquote>
+<p>et l’exécution concurrente :</p>
+<div class="math notranslate nohighlight">
+\[r_1[x] w_2[x] w_2[y] C_2 w_1[y] C_1\]</div>
+<p>Maintenant   supposons que l’exécution avec pose et relâchement de verrous
+ne respecte pas les deux phases du 2PL, et se passe de la manière suivante :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou partagé sur <em>x</em>, lit <em>x</em> puis relâche le verrou ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> pose un verrou exclusif sur <em>x</em>, et modifie <em>x</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> pose un verrou exclusif sur <em>y</em>, et modifie <em>y</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> valide puis relâche les verrous sur <em>x</em> et <em>y</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou exclusif sur <em>y</em>, modifie <em>y</em>, relâche le verrou et valide.</p></li>
+</ul>
+</div></blockquote>
+<p>On a violé la règle 3 : <span class="math notranslate nohighlight">\(T_1\)</span> a relâché le verrou sur <em>x</em> puis en a
+repris un sur <em>y</em>. Une « fenêtre » s’est ouverte qui a permis a <span class="math notranslate nohighlight">\(T_2\)</span>
+de poser des verrous sur <em>x</em> et <em>y</em>. Conséquence :
+l’exécution n’est plus sérialisable car <span class="math notranslate nohighlight">\(T_2\)</span> a écrit sur <span class="math notranslate nohighlight">\(T_1\)</span> pour <em>x</em>,
+et <span class="math notranslate nohighlight">\(T_1\)</span> a écrit sur <span class="math notranslate nohighlight">\(T_2\)</span> pour <em>y</em>. Le graphe de sérialisation
+est cyclique.</p>
+<p>Reprenons le même exemple, avec un verrouillage à deux phases :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou partagé sur <em>x</em>, lit <em>x</em> mais ne relâche pas le verrou ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> tente de poser un verrou exclusif sur <em>x</em> : impossible puisque <span class="math notranslate nohighlight">\(T_1\)</span> détient un verrou partagé,
+donc <span class="math notranslate nohighlight">\(T_2\)</span> <em>est mise en attente</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou exclusif sur <em>y</em>, modifie <em>y</em>,
+et valide ; tous les verrous détenus par <span class="math notranslate nohighlight">\(T_1\)</span>
+sont relâchés ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> est libérée : elle pose un verrou exclusif sur <em>x</em>, et
+le modifie ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> pose un verrou exclusif sur <em>y</em>, et modifie <em>y</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> valide, ce qui relâche les verrous sur <em>x</em> et <em>y</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>On obtient donc, après réordonnancement,  l’exécution suivante, qui est
+évidemment sérialisable :</p>
+<div class="math notranslate nohighlight">
+\[r_1[x] w_1[y] w_2[x] w_2[y]\]</div>
+<p>En général, le verrouillage permet une certaine imbrication
+des opérations tout en garantissant sérialisabilité et recouvrabilité.
+Notons cependant qu’il est un peu trop strict
+dans certains cas : voici l’exemple d’une exécution sérialisable
+impossible à obtenir avec un verrouillage à deux phases.</p>
+<div class="math notranslate nohighlight">
+\[r_1[x] w_2[x] C_2 w_3[y] C_3 r_1[y] w_1[z] C_1\]</div>
+<p>Un des inconvénients du verrouillage à deux phases est d’autoriser
+des <em>interblocages</em> : deux transactions concurrentes
+demandent chacune un verrou sur une ressource
+détenue par l’autre. Reprenons notre exemple de base :
+deux exécutions concurrentes de la procédure
+<em>Réservation</em>, désignées par <span class="math notranslate nohighlight">\(T_1\)</span>
+et <span class="math notranslate nohighlight">\(T_2\)</span>, consistant
+à réserver des places pour le même spectacle,
+mais pour deux clients distincts <span class="math notranslate nohighlight">\(c_1\)</span>  et <span class="math notranslate nohighlight">\(c_2\)</span>. L’ordre
+des opérations reçues par le serveur est le suivant :</p>
+<div class="math notranslate nohighlight">
+\[r_1(s)  r_1(c_1) r_2(s)  r_2(c_2)  w_2(s)  w_2(c_2) C_2 w_1(s) w_1(c_1) C_1\]</div>
+<p>On effectue des lectures pour <span class="math notranslate nohighlight">\(T_1\)</span> puis <span class="math notranslate nohighlight">\(T_2\)</span>, ensuite
+les écritures pour <span class="math notranslate nohighlight">\(T_2\)</span> puis <span class="math notranslate nohighlight">\(T_1\)</span>. Cette exécution
+n’est pas sérialisable, et le verrouillage à deux phases
+doit empêcher qu’elle se déroule dans cet ordre. Malheureusement
+il ne peut le faire qu’en rejettant une des deux transactions.
+Suivons l’algorithme pas à pas :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou partagé sur <em>s</em> et lit <em>s</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> pose un verrou partagé sur <span class="math notranslate nohighlight">\(c_1\)</span> et lit <span class="math notranslate nohighlight">\(c_1\)</span> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> pose un verrou partagé sur <em>s</em>,
+<em>ce qui est autorisé car</em> <span class="math notranslate nohighlight">\(T_1\)</span> <em>n’a elle-même qu’un verrou
+partagé</em> et lit <em>s</em> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> pose un verrou partagé sur <span class="math notranslate nohighlight">\(c_2\)</span> et lit <span class="math notranslate nohighlight">\(c_2\)</span> ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span> veut poser un verrou exclusif sur <em>s</em> :
+impossible à cause du verrou partagé de <span class="math notranslate nohighlight">\(T_1\)</span> :
+donc <span class="math notranslate nohighlight">\(T_2\)</span> est mise en attente ;</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span> veut à son tour poser un verrou exclusif sur <em>s</em> :
+impossible à cause du verrou partagé de <span class="math notranslate nohighlight">\(T_2\)</span> :
+donc <span class="math notranslate nohighlight">\(T_1\)</span> est à son tour mise en attente.</p></li>
+</ul>
+</div></blockquote>
+<p><span class="math notranslate nohighlight">\(T_1\)</span> et <span class="math notranslate nohighlight">\(T_2\)</span> sont en attente l’une de l’autre : il y a
+<em>interblocage</em> (<em>deadlock</em> en anglais).
+Cette situation ne peut pas être évitée et doit donc être
+gérée par le SGBD : en général ce dernier maintient un
+<em>graphe d’attente des transactions</em> et teste l’existence
+de cycles dans ce graphe. Si c’est le cas, c’est qu’il y a interblocage
+et une des transactions doit être annulée autoritairement,
+ce qui est à la fois déconcertant pour
+un utilisateur non averti, et désagréable puisqu’il
+faut resoumettre la transaction annulée. Cela reste bien
+entendu encore préférable à un algorithme qui autoriserait
+un résultat incorrect.</p>
+<p>Notons que le problème vient d’un accès aux mêmes ressources, mais
+dans un ordre différent : il est donc bon, au moment où l’on
+écrit des programmes, d’essayer de normaliser l’ordre d’accès
+aux données.</p>
+<p>Dès que 2 transactions lisent la même donnée avec pour
+objectif d’effectuer une mise à jour ultérieurement,
+il y a potentiellement interblocage. D’où
+l’intérêt de pouvoir demander dès la lecture
+un verrouillage exclusif (écriture). C’est la
+commande <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">....</span> <span class="pre">for</span> <span class="pre">update</span></code> que l’on trouve
+dans certains SGBD. Cette méthode reste cependant peu sûre et ne dispense
+pas de se mettre en mode sérialisable pour garantir la correction des exécutions concurrentes.</p>
+</section>
+<section id="id2">
+<h3>Quiz<a class="headerlink" href="#id2" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Une transaction <span class="math notranslate nohighlight">\(T_1\)</span> a lu un nuplet <span class="math notranslate nohighlight">\(x\)</span> et posé un verrou partagé. Quelles affirmations
+sont vraies?</p>
+<div class="reauthoring_embedded_quiz" id="verrou1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> si aucun autre verrou n’est posé, <span class="math notranslate nohighlight">\(T_1\)</span> peut poser un verrou exclusif sur <span class="math notranslate nohighlight">\(x\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  <span class="math notranslate nohighlight">\(T_2\)</span> peut poser un verrou partagé sur <span class="math notranslate nohighlight">\(x\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(T_2\)</span> peut poser un verrou exclusif sur <span class="math notranslate nohighlight">\(x\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>On reprend la procédure de copie et l’exécution concurrente de deux transactions.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[r_1(v_1)  r_2(v_2) w_1(v_2) w_2(v_1)\]</div>
+</div></blockquote>
+<p>A votre avis, en appliquant un 2PL:</p>
+<div class="reauthoring_embedded_quiz" id="verrou2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(T_1\)</span> s’exécutera avant <span class="math notranslate nohighlight">\(T_2\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  <span class="math notranslate nohighlight">\(T_2\)</span> s’exécutera avant <span class="math notranslate nohighlight">\(T_1\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> un interblocage surviendra?</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>On exécute en concurrence deux transactions de réservation, par le même client mais
+pour deux spectacles différents:</p>
+<div class="math notranslate nohighlight">
+\[r_1(s_1)  r_1(c) r_2(s_2)  r_2(c)  w_2(s_2)  w_2(c) C_2 w_1(s_1) w_1(c) C_1\]</div>
+<p>Quelle opération à votre avis entraînera le premier blocage d’une transaction ?</p>
+<div class="reauthoring_embedded_quiz" id="verrou2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> sur <span class="math notranslate nohighlight">\(r_2(c)\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  <span class="math notranslate nohighlight">\(w_2(s_2)\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(w_2(c)\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-grapheserial-graphe-de-serialisabilite-et-equivalence-des-executions admonition" id="ex-grapheserial">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-grapheserial">ex-grapheserial</a>: Graphe de sérialisabilité et équivalence
+                  des exécutions</p>
+<blockquote>
+<div><p>Identifiez les conflits et construisez les graphes de sérialisabilité pour les exécutions
+concurrentes suivantes. Indiquez les exécutions sérialisables et
+vérifiez s’il y a des exécutions équivalentes.</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(H_{1}:w_{2}[x]\:w_{3}[z]\:w_{2}[y]\:c_{2}\:r_{1}[x]\:w_{1}[z]\:c_{1}\:r_{3}[y]\:c_{3}\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(H_{2}:r_{1}[x]\:w_{2}[y]\:r_{3}[y]\:w_{3}[z]\:c_{3}\:w_{1}[z]\:c_{1}\:w_{2}[x]\:c_{2}\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(H_{3}:w_{3}[z]\:w_{1}[z]\:w_{2}[y]\:w_{2}[x]\:c_{2}\:r_{3}[y]\:c_{3}\:r_{1}[x]\:c_{1}\)</span></p></li>
+</ul>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-multiversions1-application-du-controle-multiversion-a-l-anomalie-des-lectures-non-repetables admonition" id="ex-multiversions1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-multiversions1">ex-multiversions1</a>: application du contrôle multiversion
+à l’anomalie des lectures non répétables</p>
+<blockquote>
+<div><p>On reprend l’exemple d’une imbrication de la procédure de réservation et de la procédure de contrôle
+(voir chapitre précédent).</p>
+<div class="math notranslate nohighlight">
+\[r_1(c_1) r_1(c_2)  Res(c_2, s, 2)  \ldots r_1(c_n) r_1(s)\]</div>
+<p>Appliquer le contrôle multi-versions. Que constate-t-on ?</p>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-multiversions2-les-limites-du-controle-de-concurrence-multi-versions admonition" id="ex-multiversions2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-multiversions2">ex-multiversions2</a>: les limites du contrôle de concurrence multi-versions</p>
+<blockquote>
+<div><p>Supposons qu’un hôpital gère la liste de ses médecins dans une table (simplifiée) <em>Docteur(nom, garde)</em>,
+chaque médecin pouvant ou non
+être de garde. On doit s’assurer qu’il y a toujours au moins deux médecins de garde.
+La procédure suivante doit permettre de placer un médecin au repos en vérifiant cette contrainte.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span> <span class="cm">/* Une procédure de gestion des gardes */</span>
+
+ <span class="k">create</span> <span class="k">or</span> <span class="k">replace</span> <span class="k">procedure</span> <span class="n">HorsGarde</span> <span class="p">(</span><span class="n">nomDocteur</span> <span class="nb">VARCHAR</span><span class="p">)</span> <span class="k">AS</span>
+
+  <span class="c1">-- Déclaration des variables</span>
+  <span class="n">val</span> <span class="n">nb_gardes</span><span class="p">;</span>
+
+  <span class="k">BEGIN</span>
+    <span class="c1">-- On calcule le nombre de médecin de garde</span>
+    <span class="k">SELECT</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">INTO</span> <span class="n">nb_gardes</span> <span class="k">FROM</span> <span class="n">Docteur</span> <span class="k">WHERE</span> <span class="n">nom</span> <span class="o">=</span> <span class="n">nomDocteur</span><span class="p">;</span>
+
+    <span class="k">IF</span> <span class="p">(</span><span class="n">nb_gardes</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">)</span> <span class="k">THEN</span>
+       <span class="k">UPDATE</span> <span class="n">Docteur</span> <span class="k">SET</span> <span class="n">garde</span> <span class="o">=</span> <span class="k">false</span> <span class="k">WHERE</span> <span class="n">nom</span> <span class="o">=</span> <span class="n">nomDocteur</span><span class="p">;</span>
+       <span class="k">COMMIT</span><span class="p">;</span>
+    <span class="n">ENDIF</span>
+ <span class="k">END</span><span class="p">;</span>
+<span class="o">/</span>
+</pre></div>
+</div>
+<p>En principe, cette procécure semble très correcte (et elle l’est). Supposons
+que nous ayons trois médecins, Philippe, Alice, et Michel, désignés par <em>p</em>, <em>a</em> et <em>m</em>,
+tous les trois de garde.
+Voici une exécution concurrente de deux transactions <span class="math notranslate nohighlight">\(T_1\)</span> = <em>HorsGarde(“Philippe”)</em>
+et <span class="math notranslate nohighlight">\(T_2\)</span> = <em>HorsGarde(“Michel”)</em>.</p>
+<div class="math notranslate nohighlight">
+\[r_1(p)  r_1(a) r_1(m) r_2(p)  r_2(a) r_2(m) w_1(p) w_2(m)\]</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul>
+<li><p>Quel est avec cette exécution le nombre de médecins de garde
+constatés par <span class="math notranslate nohighlight">\(T_1\)</span> et <span class="math notranslate nohighlight">\(T_2\)</span></p>
+<div class="reauthoring_embedded_quiz" id="garde1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 3 pour <span class="math notranslate nohighlight">\(T_1\)</span>, 2 pour <span class="math notranslate nohighlight">\(T_2\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 3 pour <span class="math notranslate nohighlight">\(T_1\)</span>, 3 pour <span class="math notranslate nohighlight">\(T_2\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 2 pour <span class="math notranslate nohighlight">\(T_1\)</span>, 3 pour <span class="math notranslate nohighlight">\(T_2\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est le nombre de médecins de garde à la fin?</p>
+<div class="reauthoring_embedded_quiz" id="garde2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 2</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 1</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 0</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Conclusion? Vous pouvez vérifier la sérialisabilité (conflits, graphes) et appliquer
+le contrôle de concurrence multi-versions pour vérifier s’il détecte et prévient les anomalies
+de cette exécution.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-debitcredit-le-cas-des-debits-credits admonition" id="ex-debitcredit">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-debitcredit">ex-debitcredit</a>: le cas des débits/crédits</p>
+<blockquote>
+<div><p>Les trois programmes suivants peuvent s’exécuter dans un système
+de gestion bancaire. <code class="docutils literal notranslate"><span class="pre">Débit()</span></code> diminue le solde d’un compte <em>c</em>
+avec un montant donné <em>m</em>. Pour simplifier, tout débit
+est permis (on accepte des découverts). <code class="docutils literal notranslate"><span class="pre">Crédit()</span></code> augmente le
+solde d’un compte <em>c</em> avec un montant donné <em>m</em>. Enfin
+<code class="docutils literal notranslate"><span class="pre">Transfert()</span></code> transfère un montant <em>m</em> à partir d’un compte
+source <em>s</em> vers un compte destination <em>d</em>.  L’exécution de
+chaque programme démarre par un <code class="docutils literal notranslate"><span class="pre">Start</span></code> et se termine par un
+<code class="docutils literal notranslate"><span class="pre">Commit</span></code> (non montrés ci-dessous).</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Débit (c:Compte;   |  Crédit (c:Compte;   |  Transfert (s,d:Compte;
+       m:Montant)  |          m:Montant)  |             m:Montant)
+begin              |  begin               |  begin
+  t := Read(c);    |    t := Read(c);     |    Débit(s,m);
+  Write(c,t-m);    |    Write(c,t+m);     |    Crédit(d,m);
+end                |  end                 |  end
+</pre></div>
+</div>
+<p>Le système exécute en même temps les trois opérations suivantes:</p>
+<blockquote>
+<div><blockquote>
+<div><ol class="arabic simple">
+<li><p>un transfert de montant 100 du compte A vers le compte B</p></li>
+<li><p>un crédit de 200 pour le compte A</p></li>
+<li><p>un débit de 50 pour le compte B</p></li>
+</ol>
+</div></blockquote>
+<ul>
+<li><p>Écrire les transactions <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_3\)</span>
+qui  correspondent à ces opérations. Montrer que l’histoire <em>H</em>
+suivante:</p>
+<div class="math notranslate nohighlight">
+\[r_{1}[A] r_{3}[B] w_{1}[A] r_{2}[A] w_{3}[B] r_{1}[B] c_{3} w_{2}[A] c_{2} w_{1}[B] c_{1}\]</div>
+<p>est une exécution  concurrente de <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_3\)</span>.</p>
+</li>
+<li><p>Mettre en évidence les conflits dans <em>H</em>  et construire le
+graphe de sérialisation de cette exécution. <em>H</em> est-elle
+sérialisable?</p></li>
+<li><p>Quelle est l’exécution <em>H”</em>  obtenue à partir de <em>H</em>
+par verrouillage à deux phases?</p></li>
+<li><p>Si au début le compte A avait un solde de 100 et B de 50, quel
+sera le solde des deux comptes après la reprise si une panne
+intervient après l’exécution de:math:<cite>w_{1}[B]</cite>?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-2pl1-verrouillage-a-deux-phases admonition" id="ex-2pl1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-2pl1">ex-2pl1</a>: verrouillage à deux phases</p>
+<blockquote>
+<div><p>Le programme suivant s’exécute dans un système de gestion de commandes pour
+les produits d’une entreprise. Il permet de commander une quantité donnée
+d’un produit qui se trouve en stock. Les paramètres du programme représentent
+respectivement la référence de la commande (<em>c</em>), la référence du produit (<em>p</em>)
+et la quantité commandée (<em>q</em>).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> Commander
+  <span class="nv">$c</span>: référence de la commande
+  <span class="nv">$p</span>: référence du produit
+  <span class="nv">$q</span>: quantité commandée
+
+  Lecture prix produit <span class="nv">$p</span>
+  Lecture du stock <span class="nv">$s</span>$ du produit <span class="nv">$p</span>
+  <span class="k">if</span> <span class="o">(</span><span class="nv">$q</span> &gt; <span class="nv">$s</span><span class="o">)</span> <span class="k">then</span>
+    rollback
+  <span class="k">else</span>
+     Mise à jour stock de <span class="nv">$p</span>
+    Enregistrement dans <span class="nv">$c</span> du total de facturation
+    commit
+  <span class="k">fi</span>
+</pre></div>
+</div>
+<p>Notez que le prix et la quantité de produit en
+stock sont gardés dans des enregistrements différents.</p>
+<blockquote>
+<div><ul>
+<li><p>Lesquelles parmi les transactions suivantes peuvent être
+obtenues par l’exécution du programme ci-dessus? Justifiez votre réponse.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1: r[x] r[y] R\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2: r[x] R\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_3: r[x] w[y] w[z] C\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_4: r[x] r[y] w[y] w[z] C\)</span></p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Dans le système s’exécutent en même temps trois
+transactions: deux commandes d’un même produit et le changement du prix
+de ce même produit. Montrez que l’histoire <em>H</em> ci-dessous est une exécution
+concurrente de ces trois transactions et expliquez la signification des
+enregistrements qui y interviennent.</p>
+<div class="math notranslate nohighlight">
+\[r_1[x] r_1[y] w_2[x] w_1[y] c_2 r_3[x] r_3[y] w_1[z] c_1 w_3[y] w_3[u] c_3\]</div>
+</li>
+<li><p>Vérifiez si <em>H</em> est sérialisable en identifiant
+les conflits et en construisant le graphe de sérialisation.</p></li>
+<li><p>Quelle est l’exécution obtenue par verrouillage à
+deux phases à partir de <em>H</em>? Quel prix sera appliqué pour la seconde
+commande, le même que pour la première ou le prix modifié?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-medecindegarde-les-medecins-de-garde-et-le-controle-de-concurrence admonition" id="ex-medecindegarde">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-medecindegarde">ex-medecindegarde</a>: les médecins de garde et le contrôle de concurrence</p>
+<blockquote>
+<div><p>On reprend les transactions de gestion de docteurs et de leurs gardes (voir section <a class="reference internal" href="#sec-multiversions"><span class="std std-ref">S3: Contrôle de concurrence multi-versions</span></a>).
+On a l’exécution concurrente suivante des deux transactions cherchant à lever la garde de Philippe et de Michel.</p>
+<div class="math notranslate nohighlight">
+\[r_1(p)  r_1(a) r_1(m) r_2(p)  r_2(a) r_2(m) w_1(p) w_2(m)\]</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Trouver les conflits</p></li>
+<li><p>En déduire (argumenter) que cette exécution concurrente n’est pas sérialisable</p></li>
+<li><p>Appliquer l’algorithme de contrôle multiversions</p></li>
+<li><p>Appliquer l’algorithme 2PL.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+</section>
+<section id="references">
+<h2>Références<a class="headerlink" href="#references" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Le sujet du contrôle de concurrence est complexe et a donné lieu à de très nombreux travaux. C’est, au final,
+une des très grandes réussites des systèmes relationnels. Si vous voulez aller plus loin:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le livre de Jim Gray, <em>Transaction Processing: Concepts and Techniques</em>, paru en 1992, est <em>la</em> référence</p></li>
+<li><p>Cet excellent résumé est facilement accessible: <a class="reference external" href="https://wiki.postgresql.org/wiki/Serializable">https://wiki.postgresql.org/wiki/Serializable</a></p></li>
+<li><p>Le contrôle multi-versions amélioré pour atteindre le niveau sérialisable est ici:
+<a class="reference external" href="http://www.cs.nyu.edu/courses/fall09/G22.2434-001/p729-cahill.pdf">http://www.cs.nyu.edu/courses/fall09/G22.2434-001/p729-cahill.pdf</a>. Quelques exemples du chapitre
+sont repris de cet article.</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">10. Contrôle de concurrence</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-isolation-par-versionnement">S1: isolation par versionnement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#versionnement-et-lectures-propres">Versionnement et lectures « propres »</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#lectures-repetables">Lectures répétables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-la-serialisabilite">S2: la sérialisabilité</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#conflits-et-graphe-de-serialisation">Conflits et graphe de sérialisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#condition-de-serialisabilite">Condition de sérialisabilité</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-controle-de-concurrence-multi-versions">S3: Contrôle de concurrence multi-versions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#les-possibilites-de-conflit">Les possibilités de conflit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#l-algorithme">L’algorithme</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#limites-de-l-algorithme">Limites de l’algorithme</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s4-le-verrouillage-a-deux-phases">S4: le verrouillage à deux phases</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#verrouillage">Verrouillage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#controle-par-verrouillage-a-deux-phases">Contrôle par verrouillage à deux phases</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quelques-exemples">Quelques exemples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#references">Références</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="transactions.html" title="9. Transactions"
+             >précédent</a> |
+          <a href="rp.html" title="11. Reprise sur panne"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;10. &lt;/span&gt;Contrôle de concurrence</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

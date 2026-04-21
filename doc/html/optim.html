@@ -1,0 +1,1544 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>7. Evaluation et optimisation &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="8. Travaux pratiques: optimisation" href="tp-optim.html" />
+    <link rel="prev" title="6. Opérateurs et algorithmes" href="opalgo.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;7. &lt;/span&gt;Evaluation et optimisation</a></div>
+        <div class="rel">
+          <a href="opalgo.html" title="6. Opérateurs et algorithmes"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="tp-optim.html" title="8. Travaux pratiques: optimisation"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="evaluation-et-optimisation">
+<span id="chap-eval"></span><h1><span class="section-number">7. </span>Evaluation et optimisation<a class="headerlink" href="#evaluation-et-optimisation" title="Lien permanent vers ce titre">¶</a></h1>
+<p>L’objectif de ce chapitre est de montrer comment un SGBD analyse,
+optimise et exécute une requête. SQL étant un langage <em>déclaratif</em>
+dans lequel on n’indique ni les algorithmes à appliquer, ni les
+chemins d’accès aux données, le système a toute latitude pour
+déterminer ces derniers et les combiner de manière à obtenir les
+meilleures performances.</p>
+<p>Le module chargé de cette tâche, <em>l’optimiseur de requêtes</em>,
+tient donc un rôle extrêmement
+important puisque l’efficacité d’un SGBD est fonction, pour une grande
+part, du temps d’exécution des requêtes. Ce module est
+complexe. Il applique d’une part des  techniques éprouvées, d’autre part des
+<em>heuristiques</em> propres à chaque système. Il est en effet reconnu qu’il
+est très difficile de trouver en un temps raisonnable l’algorithme
+<em>optimal</em> pour exécuter une requête donnée. Afin d’éviter de consacrer
+des resources considérables à l’optimisation, ce qui se ferait au
+détriment des autres tâches du système, les SGBD s’emploient donc à
+trouver, en un temps limité, un algorithme raisonnablement bon.</p>
+<p>La compréhension des mécanismes d’exécution et d’optimisation fournit
+une aide très précieuse quand vient le moment d’analyser le
+comportement d’une application et d’essayer de distinguer les goulots
+d’étranglements. Comme nous l’avons vu dans les chapitres consacrés
+au stockage des données et aux index, des modifications très simples
+de l’organisation physique peuvent aboutir à des améliorations (ou des
+dégradations) extrêmement spectaculaires des performances. Ces
+constatations se transposent évidemment au niveau des algorithmes
+d’évaluation : le choix d’utiliser ou non un index conditionne
+fortement les temps de réponse, sans que ce choix soit d’ailleurs
+évident dans toutes les circonsstances.</p>
+<section id="s1-introduction-a-l-optimisation-et-a-l-evaluation">
+<h2>S1: Introduction à l’optimisation et à l’évaluation<a class="headerlink" href="#s1-introduction-a-l-optimisation-et-a-l-evaluation" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slintroeval.pdf">Diapositives:</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a421a3nizowc0/">Vidéo d’introduction à l’optimisation</a></p></li>
+</ul>
+</div>
+<p>Commençons par situer le problème. Nous avons une requête, exprimée en SQL, soumise au système. Comme vous le savez,
+SQL permet de déclarer un besoin, mais ne dit pas comment calculer le résultat.
+C’est au système de produire une forme opératoire,
+un programme, pour effectuer ce calcul (<a class="reference internal" href="#exec-optim-1"><span class="std std-numref">Fig. 7.1</span></a>), . Notez que cette approche a un double avantage. Pour l’utilisateur, elle permet de ne pas
+se soucier d’algorithmique d’exécution. Pour le système elle laisse la liberté du choix de la meilleure méthode. C’est
+ce qui fonde l’optimisation, la liberté de déterminer la manière de répondre a un besoin.</p>
+<figure class="align-center" id="id2">
+<span id="exec-optim-1"></span><a class="reference internal image-reference" href="_images/exec-optim-1.png"><img alt="_images/exec-optim-1.png" src="_images/exec-optim-1.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.1 </span><span class="caption-text">Les requêtes SQL sont <em>déclaratives</em></span><a class="headerlink" href="#id2" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>En base de données, le programme qui évalue une requête a une forme très
+particulière. On l’appelle <em>plan d’exécution</em>.
+Il a la forme d’un arbre constitué d’opérateurs qui échangent des données
+(<a class="reference internal" href="#exec-optim-2"><span class="std std-numref">Fig. 7.2</span></a>).
+Chaque opérateur effectue une tâche précise et
+restreinte: transformation, filtrage, combinaisons diverses. Comme nous le verrons, un petit nombre d’opérateurs suffit a évaluer
+des requêtes, même très complexes. Cela permet au système de construire très rapidement, a la volée, un plan et de commencer a
+l’exécuter. La question suivante est d’étudier comment le système passe de la requête au plan.</p>
+<figure class="align-center" id="id3">
+<span id="exec-optim-2"></span><a class="reference internal image-reference" href="_images/exec-optim-2.png"><img alt="_images/exec-optim-2.png" src="_images/exec-optim-2.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.2 </span><span class="caption-text">De la requête SQL au plan d’exécution.</span><a class="headerlink" href="#id3" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le passage de SQL a un plan s’effectue en deux étapes, que j’appellerai a) et b
+(<a class="reference internal" href="#exec-optim-3"><span class="std std-numref">Fig. 7.3</span></a>).
+Dans l’étape a) on tire partie de l’équivalence
+entre SQL, ou une grande partie de SQL, avec l’algèbre.
+Pour toute requête on peut donc produire une expression de l’algèbre.
+Une telle expression  est déjà une forme opérationnelle, qui nous dit quelles opérations effectuer.  Nous l’appellerons plan d’execution
+logique. Une expression de l’algèbre peut se représenter comme un arbre, et
+nous sommes déjà proches d’un plan d’exécution. Il
+reste cependant assez abstrait.</p>
+<figure class="align-center" id="id4">
+<span id="exec-optim-3"></span><a class="reference internal image-reference" href="_images/exec-optim-3.png"><img alt="_images/exec-optim-3.png" src="_images/exec-optim-3.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.3 </span><span class="caption-text">Les deux phases de l’optimisation</span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Dans l’étape b) le système va choisir des opérateurs particulièrs,
+en fonction d’un
+contexte spécifique. Ce peut être là présence ou non d’index, la taille des tables,
+la mémoire disponible. Cette étape b) donne
+un plan d’exécution <em>physique</em>, applicable au contexte.</p>
+<p>Reste la question de l’optimisation. Il faut ici élargir le schéma:
+à chaque étape, a) ou b), plusieurs options sont possibles. Pour l’étape
+a), c’est la capacité des opérateurs de l’algèbre
+à fournir  plusieurs expressions équivalentes. La <a class="reference internal" href="#exec-optim-4"><span class="std std-numref">Fig. 7.4</span></a> montre par exemple deux combinaisons possibles
+issues de la même requête sql. Pour l’étape b) les options sont liées au
+choix de l’algorithmique, des opérateurs à exécuter.</p>
+<figure class="align-center" id="id5">
+<span id="exec-optim-4"></span><a class="reference internal image-reference" href="_images/exec-optim-4.png"><img alt="_images/exec-optim-4.png" src="_images/exec-optim-4.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.4 </span><span class="caption-text">Processus général d’optimisation et d’évaluation</span><a class="headerlink" href="#id5" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La  <a class="reference internal" href="#exec-optim-4"><span class="std std-numref">Fig. 7.4</span></a> nous donne la perspective générale de cette partie du cours. Nous allons étudier les opérateurs, les plans
+d’exécution, les transformations depuis une requête SQL, et quelques critères de choix pour l’optimisation.</p>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Dire qu’une requête est <em>déclarative</em>, c’est dire que (indiquer les phrases correctes) :</p>
+<div class="reauthoring_embedded_quiz" id="optimReq1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La requête ne définit pas précisément le résultat.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  La requête ne dit pas comment calculer le résultat.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> La requête est indépendante de l’organisation des données.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  La requête est une expression de besoin en langage naturel.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Un plan d’exécution, c’est</p>
+<div class="reauthoring_embedded_quiz" id="optimReq2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Un programme choisi parmi un ensemble fixe et pré-défini de programmes proposés par le système.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Un programme produit à la volée par le système pour chaque requête.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Un arbre d’opérateurs communicants entre eux.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>L’optimisation de requêtes, c’est</p>
+<div class="reauthoring_embedded_quiz" id="optimReq3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Modifier une requête SQL pour qu’elle soit la plus efficace possible.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Structurer les données pour qu’elles soient adaptées aux requêtes soumises.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Choisir, pour chaque requête, la meilleure manière de l’exécuter.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelles sont les affirmations vraies parmi les suivantes?</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="optimReq3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le choix d’un plan d’exécution dépend de la mémoire RAM disponible.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le choix d’un plan d’exécution dépend de la forme de la requête SQL</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le choix d’un plan d’exécution dépend de l’existence d’index</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le choix d’un plan d’exécution dépend du langage de programmation utilisé.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-traitement-de-la-requete">
+<h2>S2: traitement de la requête<a class="headerlink" href="#s2-traitement-de-la-requete" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sltraitrequete.pdf">Diapositives: traitement d’une requête</a></p></li>
+</ul>
+</div>
+<p>Cette section est consacrée à la phase de traitement permettant de passer
+d’une requête SQL à une forme « opérationnelle ». Nous présentons successivement
+la traduction de la requête SQL en langage algébrique
+représentant les opérations nécessaires, puis
+les réécritures symboliques qui organisent ces
+opérations de la manière la plus efficace.</p>
+<section id="decomposition-en-bloc">
+<h3>Décomposition en bloc<a class="headerlink" href="#decomposition-en-bloc" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Une requête SQL est décomposée en une collection de
+<em>blocs</em>. L’optimiseur se concentre sur l’optimisation d’un bloc
+à la fois. Un bloc est une requête <code class="docutils literal notranslate"><span class="pre">select-from-where</span></code>
+sans imbrication. La décomposition en
+blocs est nécessaire à cause des requêtes imbriquées. Toute requête
+SQL ayant des imbrications peut être décomposée en une collection de
+blocs. Considérons par exemple
+la requête suivante qui calcule le film le mieux
+ancien:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">annee</span> <span class="o">=</span> <span class="p">(</span><span class="k">select</span> <span class="k">min</span> <span class="p">(</span><span class="n">annee</span><span class="p">)</span> <span class="k">from</span> <span class="n">Film</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>On peut décomposer cette requête en deux blocs: le premier calcule
+l’année minimale <span class="math notranslate nohighlight">\(A\)</span>. Le deuxième bloc calcule le(s) film(s)
+paru en <span class="math notranslate nohighlight">\(A\)</span>  grâce à une référence au premier bloc.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">annee</span> <span class="o">=</span> <span class="n">A</span>
+</pre></div>
+</div>
+<p>Cette méthode
+peut s’avérer très inefficace et il est préférable de transformer la
+requête avec imbrication en une requête équivalente sans imbrication
+(un seul bloc) quand cette équivalence existe. Malheureusement, les
+systèmes relationnels ne sont pas toujours capables de déceler ce type
+d’équivalence. Le choix de la syntaxe de la requête SQL a donc une influence sur les
+possibilités d’optimisation laissées au SGBD.</p>
+<p>Prenons un exemple concret pour comprendre la subtilité de certaines
+situations, et pourquoi le système à parfois besoin qu’on lui facilite
+la tâche. Notre base de données est toujours la même, rappelons
+le schéma de la table <code class="docutils literal notranslate"><span class="pre">Rôle</span></code> car il est important.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Rôle</span> <span class="p">(</span><span class="n">id_acteur</span> <span class="nb">integer</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+                   <span class="n">id_film</span> <span class="nb">integer</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+                   <span class="n">nom_rôle</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+                   <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_acteur</span><span class="p">,</span> <span class="n">id_film</span><span class="p">),</span>
+                   <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_acteur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
+                   <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_film</span><span class="p">)</span> <span class="k">references</span> <span class="n">Film</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
+                   <span class="p">);</span>
+</pre></div>
+</div>
+<p>Le  système crée un index sur la clé primaire qui est composée de deux attributs.
+Quelles requêtes peuvent tirer parti de cet index? Celles sur l’identifiant
+de l’acteur, celles sur l’identifiant du film? Réfléchissez-y, réponse plus loin.</p>
+<p>Maintenant,  notre requête est la suivante:
+« Dans quel film paru en 1958 joue
+James Stewart » (vous avez sans doute deviné qu’il
+s’agit de <em>Vertigo</em>)? Voici comment on peut
+exprimer la requête SQL.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Rôle</span> <span class="n">r</span><span class="p">,</span> <span class="n">Artiste</span> <span class="n">a</span>
+<span class="k">where</span>  <span class="n">a</span><span class="p">.</span><span class="n">nom</span> <span class="o">=</span> <span class="s1">&#39;Stewart&#39;</span> <span class="k">and</span> <span class="n">a</span><span class="p">.</span><span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">id_film</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_film</span>
+<span class="k">and</span>    <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">idArtiste</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+</pre></div>
+</div>
+<p>Cette requête est en un seul « bloc », mais il
+est tout à fait possible – question de style ? – de l’écrire
+de la manière suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Rôle</span> <span class="n">r</span>
+<span class="k">where</span>  <span class="n">f</span><span class="p">.</span><span class="n">id_film</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_film</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+<span class="k">and</span>    <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span> <span class="k">in</span> <span class="p">(</span><span class="k">select</span> <span class="n">id_acteur</span>
+                      <span class="k">from</span> <span class="n">Artiste</span>
+                      <span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Stewart&#39;</span>
+                      <span class="k">and</span> <span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Au lieu d’utiliser <code class="docutils literal notranslate"><span class="pre">in</span></code>, on peut également
+effectuer une requête <em>corrélée</em> avec <code class="docutils literal notranslate"><span class="pre">exists</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Rôle</span> <span class="n">r</span>
+<span class="k">where</span>  <span class="n">f</span><span class="p">.</span><span class="n">id_film</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_film</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+<span class="k">and</span>    <span class="k">exists</span> <span class="p">(</span><span class="k">select</span> <span class="s1">&#39;x&#39;</span>
+               <span class="k">from</span> <span class="n">Artiste</span> <span class="n">a</span>
+               <span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Stewart&#39;</span>
+               <span class="k">and</span> <span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span>
+               <span class="k">and</span> <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">id_acteur</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Encore mieux (ou pire), on peut utiliser deux imbrications:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span> <span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span> <span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+<span class="k">and</span>  <span class="n">id_film</span> <span class="k">in</span>
+       <span class="p">(</span><span class="k">select</span> <span class="n">id_film</span> <span class="k">from</span> <span class="n">Rôle</span>
+        <span class="k">where</span> <span class="n">id_acteur</span> <span class="k">in</span>
+             <span class="p">(</span><span class="k">select</span> <span class="n">id_acteur</span>
+              <span class="k">from</span> <span class="n">Artiste</span>
+              <span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Stewart&#39;</span>
+              <span class="k">and</span> <span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Que l’on peut aussi formuler en:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span> <span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span> <span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+<span class="k">and</span> <span class="k">exists</span>
+       <span class="p">(</span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Rôle</span>
+        <span class="k">where</span> <span class="n">id_film</span> <span class="o">=</span> <span class="n">Film</span><span class="p">.</span><span class="n">id</span>
+        <span class="k">and</span> <span class="k">exists</span>
+             <span class="p">(</span><span class="k">select</span> <span class="o">*</span>
+              <span class="k">from</span> <span class="n">Artiste</span>
+              <span class="k">where</span> <span class="n">id</span> <span class="o">=</span> <span class="n">Rôle</span><span class="p">.</span><span class="n">id_acteur</span>
+              <span class="k">and</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Stewart&#39;</span>
+              <span class="k">and</span> <span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Dans les deux dernier cas on a trois blocs. La requête est
+peut-être plus facile
+à comprendre (vraiment?), mais le système a très peu de choix sur
+l’exécution: on doit parcourir tous
+les films parus en 1958, pour chacun on prend
+tous les rôles, et pour chacun de ces rôles
+on va voir s’il s’agit bien de James Stewart.</p>
+<p>S’il n’y a pas d’index sur le champ <code class="docutils literal notranslate"><span class="pre">annee</span></code>
+de <code class="docutils literal notranslate"><span class="pre">Film</span></code>, il faudra balayer <em>toute la table</em>,
+puis pour chaque film, c’est la catastrophe:
+il faut parcourir tous les rôles pour garder ceux
+du film courant car aucun index n’est disponible. Enfin
+pour chacun de ces rôles il faut utiliser l’index sur
+<code class="docutils literal notranslate"><span class="pre">Artiste</span></code>.</p>
+<div class="admonition-pourquoi-ne-peut-on-pas-utiliser-l-index-sur-role admonition">
+<p class="admonition-title"><strong>Pourquoi ne peut-on pas utiliser l’index sur</strong> <code class="docutils literal notranslate"><span class="pre">Rôle</span></code>?</p>
+<p>La clé de <code class="docutils literal notranslate"><span class="pre">Rôle</span></code> est une clé composite <code class="docutils literal notranslate"><span class="pre">(id_acteur,</span> <span class="pre">id_film)</span></code>. L’index
+est un arbre B construit sur la concaténation des deux identifiants <em>dans
+l’ordre où il sont spécifiés</em>. Souvenez-vous: un arbre B s’appuie sur
+l’ordre des clés, et on peut effectuer des recherches sur un <em>préfixe</em>
+de la clé.  En revanche il est impossible d’utiliser l’arbre B sur un
+<em>suffixe</em>. Ici, on peut utiliser l’index pour des requêtes sur <code class="docutils literal notranslate"><span class="pre">id_acteur</span></code>,
+pas pour des requêtes sur <code class="docutils literal notranslate"><span class="pre">id_film</span></code>. C.Q.F.D.</p>
+</div>
+<p>Telle quelle, cette  syntaxe basée sur l’imbrication
+présente le risque d’être extrêmement coûteuse
+à évaluer.
+Or il existe un plan bien meilleur (lequel?), mais
+le système ne peut le trouver que s’il a des degrés
+de liberté suffisants, autrement dit si la requête est
+<em>à plat</em>, en un seul bloc. Il est donc recommandé
+de limiter l’emploi des requêtes imbriquées à de petites
+tables dont on est sûr qu’elles résident en mémoire.</p>
+</section>
+<section id="traduction-et-reecriture">
+<h3>Traduction et réécriture<a class="headerlink" href="#traduction-et-reecriture" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous nous concentrons maintenant sur le traitement d’un bloc,
+étant entendu que ce traitement doit être effectué autant de fois
+qu’il y a de blocs dans une requête. Il comprend
+plusieurs phases. Tout d’abord une analyse syntaxique est effectuée,
+puis une traduction algébrique permettant d’exprimer la
+requête sous la forme d’un ensemble d’opérations sur
+les tables. Enfin l’optimisation consiste
+à trouver les meilleurs chemins d’accès aux données
+et à choisir les meilleurs algorithmes possibles
+pour effectuer ces opérations.</p>
+<p>L’analyse syntaxique vérifie la validité (syntaxique) de la
+requête. On vérifie notamment l’existence des relations (arguments de
+la clause <code class="docutils literal notranslate"><span class="pre">from</span></code>) et des attributs (clauses <code class="docutils literal notranslate"><span class="pre">select</span></code> et
+<code class="docutils literal notranslate"><span class="pre">where</span></code>). On vérifie également la correction grammaticale
+(notamment de la clause <code class="docutils literal notranslate"><span class="pre">where</span></code>). D’autres transformations
+sémantiques simples sont faites au delà de l’analyse syntaxique. Par
+exemple, on peut détecter des contradictions comme <code class="docutils literal notranslate"><span class="pre">année</span> <span class="pre">=</span> <span class="pre">1998</span>
+<span class="pre">and</span> <span class="pre">année</span> <span class="pre">=</span> <span class="pre">2003</span></code>. Enfin un certain nombre de simplifications sont
+effectuées. À l’issue de cette phase, le système considère que la
+requête est bien formée.</p>
+<p>L’étape suivante  consiste à  traduire
+la requête <span class="math notranslate nohighlight">\(q\)</span> en une expression algébrique <span class="math notranslate nohighlight">\(e(q)\)</span>.
+Nous allons prendre pour commencer
+une requête un peu plus simple que la précédente: trouver
+le titre du film paru en 1958, où l’un des acteurs joue
+le rôle de John Ferguson (rassurez-vous c’est toujours <em>Vertigo</em>).
+Voici la requête SQL:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Rôle</span> <span class="n">r</span>
+<span class="k">where</span>  <span class="n">nom_rôle</span> <span class="o">=</span><span class="s1">&#39;John Ferguson&#39;</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_ilm</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">année</span> <span class="o">=</span> <span class="mi">1958</span>
+</pre></div>
+</div>
+<p>Cette requête correspond aux opérations suivantes:
+une <em>jointure</em> entre les rôles et les films,
+une <em>sélection</em> sur les films (année=1958),
+une <em>sélection</em> sur les rôles (“John Ferguson),
+enfin une <em>projection</em> pour éliminer les colonnes
+non désirées.  La combinaison de ces opérations
+donne l’expression algébrique suivante:</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}(\sigma_{annee=1958 \land nom\_rôle='\mathrm{John\ Ferguson}'}(Film \Join_{id=id\_film} Rôle)\]</div>
+<p>Cette expression comprend des opérations unaires (un seul argument)
+et des opérations binaires. On peut la représenter sous la
+forme d’un arbre (<a class="reference internal" href="#qtradalg"><span class="std std-numref">Fig. 7.5</span></a>), ou <em>Plan d’Exécution
+Logique</em> (PEL), représentant l’expression algébrique
+équivalente à la requête SQL. Dans l’arbre, les feuilles correspondent
+aux tables de l’expression algébrique, et les nœuds internes
+aux opérateurs. Un arc entre un nœud <span class="math notranslate nohighlight">\(n\)</span>  et
+son nœud père <span class="math notranslate nohighlight">\(p\)</span>  indique que l“« opération <span class="math notranslate nohighlight">\(p\)</span>
+s’applique au résultat de  l’opération
+<span class="math notranslate nohighlight">\(n\)</span> ».</p>
+<figure class="align-center" id="id6">
+<span id="qtradalg"></span><a class="reference internal image-reference" href="_images/QTradAlg.png"><img alt="_images/QTradAlg.png" src="_images/QTradAlg.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.5 </span><span class="caption-text">Expression algébrique sous forme arborescente</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’interprétation de l’arbre est la suivante. On commence par exécuter
+les opérations sur les feuilles (ici une jointure); sur le
+résultat, on effectue les opérations correspondant aux nœuds de
+plus haut niveau (ici une sélection), et ainsi de suite, jusqu`à ce
+qu’on obtienne le résultat (ici après la projection).  Cette
+interprétation est bien sûr rendue possible par le fait que tout
+opérateur prend une table en entrée et produit une table en sortie.</p>
+<p>Avec cette représentation de la requête sous une forme « opérationnelle »,
+nous sommes prêts pour la phase d’optimisation.</p>
+</section>
+</section>
+<section id="s3-optimisation-de-la-requete">
+<h2>S3: optimisation de la requête<a class="headerlink" href="#s3-optimisation-de-la-requete" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sloptim.pdf">Diapositives: l’optimisation d’une requête</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a4224c6w3cp17/">Vidéo sur l’optimisation algébrique</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a42376acjqp1g/">Vidéo sur les plans d’exécution (1)</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a423cagaw4i9b//">Vidéo sur les plans d’exécution (2)</a></p></li>
+</ul>
+</div>
+<section id="la-reecriture">
+<h3>La réécriture<a class="headerlink" href="#la-reecriture" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous disposons donc d’un plan d’exécution logique (PEL) présentant,
+sous une forme normalisée (par exemple, les projections, puis les sélections, puis
+les jointures) les opérations nécessaires à l’exécution
+d’une requête donnée.</p>
+<p>On peut reformuler le PEL  grâce
+à l’existence de propriétés sur les expressions de l’algèbre
+relationnelle. Ces propriétés appelées <em>lois algébriques</em> ou
+encore <em>règles de réécriture</em> permettent de transformer
+l’expression algébrique en une expression équivalente et donc de
+réagencer l’arbre. Le PEL obtenu est équivalent, c’est-à-dire qu’il
+conduit au même résultat. En transformant les PEL grâce à ces règles,
+on peut ainsi obtenir des plans d’exécution alternatifs, et tenter d’évaluer
+lequel est le meilleur.
+Voici la liste des règles de réécriture les
+plus importantes:</p>
+<blockquote>
+<div><ul>
+<li><p>Commutativité des jointures.</p>
+<div class="math notranslate nohighlight">
+\[R \Join S  \equiv S \Join R\]</div>
+</li>
+<li><p>Associativité des jointures</p>
+<div class="math notranslate nohighlight">
+\[(R \Join S) \Join T \equiv R \Join (S \Join T)\]</div>
+</li>
+<li><p>Regroupement des sélections</p>
+<div class="math notranslate nohighlight">
+\[\sigma_{A='a' \wedge B='b'}(R) \equiv \sigma_{A='a'}(\sigma_{B='b'}(R))\]</div>
+</li>
+<li><p>Commutativité de la sélection et de la projection</p>
+<div class="math notranslate nohighlight">
+\[\pi_{A_1, A_2, ... A_p}(\sigma_{A_i='a} (R)) \equiv
+    \sigma_{A_i='a}(\pi_{A_1, A_2, ... A_p}(R)), i \in \{1,...,p\}\]</div>
+</li>
+<li><p>Commutativité de la sélection et de la jointure</p>
+<div class="math notranslate nohighlight">
+\[\sigma_{A='a'} (R(...A...) \Join S) \equiv \sigma_{A='a'}(R) \Join S\]</div>
+</li>
+<li><p>Distributivité de la sélection sur l’union</p>
+<div class="math notranslate nohighlight">
+\[\sigma_{A='a'} (R \cup S) \equiv \sigma_{A='a'} (R) \cup \sigma_{A='a'} (S)\]</div>
+</li>
+<li><p>Commutativité de la projection et de la jointure</p>
+<div class="math notranslate nohighlight">
+\[\pi_{A_1 ... A_pB_1... B_q} (R \Join_{A_i=B_j} S) \equiv \pi_{A_1 ... A_p}(R) \Join_{A_i=B_j}\pi_{B_1... B_q}(S)\; i \in \{1,..,p\}, j \in \{1,...,q\}\]</div>
+</li>
+<li><p>Distributivité de la projection sur l’union</p>
+<div class="math notranslate nohighlight">
+\[\pi_{A_1A_2...A_p} (R \cup S) \equiv \pi_{A_1A_2...A_p} (R) \cup \pi_{A_1A_2...A_p} (S)\]</div>
+</li>
+</ul>
+</div></blockquote>
+<p>Ces règles sont à la base du processus d’optimisation dont
+le principe est <em>d’énumérer</em> tous les plans d’exécution possibles.
+Par exemple la règle 3 permet
+de gérer finement l’affectation des sélections. En effet si la relation est
+indexée sur l’atttribut <code class="docutils literal notranslate"><span class="pre">B</span></code>, la règle justifie de filter sur <code class="docutils literal notranslate"><span class="pre">A</span></code>
+seulement les enregistrements satisfaisant le critère <span class="math notranslate nohighlight">\(B='b'\)</span>  obtenus par traversée
+d’index. La commutatitivité de la projection avec la sélection et la
+jointure (règles 4 et 7) d’une part et de la sélection et de la
+jointure d’autre part (règle 5) permettent de faire les sélections et
+les projections le plus tôt possible dans le plan (et donc le plus bas possible
+dans l’arbre)  pour <em>réduire les tailles des relations
+manipulées</em>, ce qui est l’idée de base pour le choix d’un
+<em>meilleur</em> PEL.
+En effet nous avons vu
+que l’efficacité des algorithmes implantant les opérations algébriques
+est fonction de la taille des  relations en entrée. C’est
+particulièrement vrai pour la jointure qui est une opération
+coûteuse. Quand une séquence comporte une jointure et une sélection,
+il est  préférable de faire la sélection d’abord: on réduit ainsi la taille
+d’une ou des deux relations à joindre, ce qui peut avoir un impact
+considérable sur le temps de traitement de la jointure.</p>
+<p><em>Pousser</em> les sélections le plus bas possible dans l’arbre,
+c’est-à-dire essayer de les appliquer le plus rapidement possible et
+éliminer par projection les attributs non
+nécessaires pour obtenir le résultat de la requête sont donc  deux
+heuristiques le plus souvent effectives pour transformer un PEL en un meilleur PEL (équivalent) .</p>
+<p>Voici un algorithme simple résumant ces idées:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Séparer les sélections avec plusieurs prédicats
+en plusieurs sélections à un prédicat (règle 3).</p></li>
+<li><p>Descendre les sélections le plus bas possible dans l’arbre (règles 4, 5, 6)</p></li>
+<li><p>Regrouper les sélections sur une même relation (règle 3).</p></li>
+<li><p>Descendre les projections le plus bas possible (règles 7 et 8).</p></li>
+<li><p>Regrouper les projections sur une même relation.</p></li>
+</ul>
+</div></blockquote>
+<p>Reprenons notre requête cherchant le film
+paru en 1958 avec un rôle « John Ferguson ». Voici l’expression
+algébrique complète.</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}(\sigma_{annee=1958 \land nom\_rôle='John\ Ferguson'}(Film \Join_{id=id\_film} (Rôle) )\]</div>
+<p>L’expression est correcte, mais probablement pas optimale.
+Appliquons notre algorithme. La première étape
+donne l’expression suivante:</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}(\sigma_{annee=1958} ( \sigma_{nom\_rôle='John\ Ferguson'}(Film \Join_{id=id\_film} (Rôle) ))\]</div>
+<p>On a donc séparé les sélections. Maintenant on les descend
+dans l’arbre:</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}( \sigma_{annee=1958} (Film) \Join_{id=id\_film} \sigma_{nom\_rôle='John\ Ferguson'}(Rôle) )\]</div>
+<p>Finalement il reste à ajouter des projections pour limiter
+la taille des enregistrements. À chaque étape du plan, les projections
+consisteraient (nous ne les montrons pas) à supprimer les attributs inutiles.
+Pour conclure deux remarques sont nécessaires:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le principe « sélection avant jointure » conduit dans la plupart des cas à un PEL plus efficace;
+mais il peut arriver (très rarement) que la jointure soit plus réductrice en taille et
+que la stratégie « jointure d’abord, sélection ensuite », conduise à un
+meilleur PEL.</p></li>
+<li><p>cette optimisation du PEL, si elle est nécessaire, est loin
+d’être suffisante: il faut ensuite choisir le « meilleur » algorithme
+pour chaque opération du PEL. Ce choix va dépendre des chemins d’accès
+et des statistiques sur les tables de la base et bien entendu des
+algorithmes d’évaluation implantés dans le noyau. Le PEL est alors
+transformé en un plan d’exécution physique du SGBD.</p></li>
+</ul>
+</div></blockquote>
+<p>Cette transformation constitue la dernière étape de l’optimisation. Elle
+fait l’objet de la section suivante.</p>
+</section>
+<section id="plans-d-execution">
+<h3>Plans d’exécution<a class="headerlink" href="#plans-d-execution" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un plan d’exécution physique (PEP)
+est un arbre d’opérateurs (on parle <em>d’algèbre physique</em>), issus
+d’un « catalogue » propre à chaque SGBD. On retrouve, avec
+des variantes, les principaux opérateurs d’un SGBD à un autre. Nous
+les avons étudiés dans le chapitre <a class="reference internal" href="#chap-eval"><span class="std std-ref">Evaluation et optimisation</span></a>, et nous
+les reprenons maintenant pour étudier quelques exemples de plan d’exécution.</p>
+<p>On peut distinguer tout d’abord les opérateurs <em>d’accès</em>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le parcours séquentiel d’une table, <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>,</p></li>
+<li><p>le parcours d’index, <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>,</p></li>
+<li><p>l’accès direct à un enregistrement par son adresse, <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>, nécessairement
+combiné avec le précédent.</p></li>
+</ul>
+</div></blockquote>
+<p>Puis, une second catégorie que nous appellerons opérateurs de <em>manipulation</em>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>la sélection, <code class="docutils literal notranslate"><span class="pre">Filter</span></code>;</p></li>
+<li><p>la projection, <code class="docutils literal notranslate"><span class="pre">Project</span></code>;</p></li>
+<li><p>le tri, <code class="docutils literal notranslate"><span class="pre">Sort</span></code>;</p></li>
+<li><p>la fusion de deux listes, <code class="docutils literal notranslate"><span class="pre">Merge</span></code>;</p></li>
+<li><p>la jointure par boucles imbriquées indexées, <code class="docutils literal notranslate"><span class="pre">IndexedNestedLoop</span></code>, abrégée en <code class="docutils literal notranslate"><span class="pre">inL</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<p>Cela nous suffira.   Nous reprenons notre requête cherchant les films
+parus en 1958 avec un rôle « John Ferguson ». Pour mémoire, le plan d’exécution logique auquel
+nous étions parvenu est le suivant.</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}( \sigma_{annee=1958} (Film) \Join_{id=id\_film} \sigma_{nom\_rôle='John\ Ferguson'}(Rôle) )\]</div>
+<p>Nous devons maintenant choisir des opérateurs physiques, choix qui
+dépend de nombreux facteurs: chemin d’accès, statistiques,
+nombre de blocs en mémoire centrale. En fonction de ces
+paramètres, l’optimiseur choisit, pour chaque nœud du PEL, un opérateur
+physique ou une combinaison d’opérateurs.</p>
+<p>Une première difficulté vient du grand
+nombre de critères à considérer: quelle mémoire allouer, comment la
+partager entre opérateurs, doit-on privilégier temps de réponse ou
+temps d’exécution, etc.  Une autre difficulté vient du fait que le
+choix d’un algorithme pour un nœud du PEL peut avoir un impact sur le
+choix d’un algorithme pour d’autres nœuds  (notamment concernant
+l’utilisation de la mémoire). Tout cela mène à une procédure
+d’optimisation complexe, mise au point et affinée par les concepteurs de chaque système,
+dont il est bien difficile (et sans doute peu utile) de connaître les détails.
+Ce qui suit est donc plutôt une méthodologie générale, illustrée
+par des exemples.</p>
+<p>Prenons comme hypothèse directrice  que l’objectif principal de l’optimiseur
+soit d’exécuter les jointures avec l’algorithme <code class="docutils literal notranslate"><span class="pre">IndexNestedLoop</span></code> (ce qui est raisonnable
+pour obtenir un bon temps de réponse et limiter la mémoire nécessaire).
+Pour chaque jointure, il faut donc envisager les index disponibles. Ici, la jointure
+s’effectue entre <code class="docutils literal notranslate"><span class="pre">Film</span></code> et <code class="docutils literal notranslate"><span class="pre">Rôle</span></code>, ce dernier étant indexé sur la clé
+primaire <code class="docutils literal notranslate"><span class="pre">(id_acteur,</span> <span class="pre">id_film)</span></code>. La jointure est commutative (cf. les règles
+de réécriture. On peut donc effectuer, de manière équivalente,</p>
+<div class="math notranslate nohighlight">
+\[Film \Join_{id=id\_film} Rôle\]</div>
+<p>ou</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[Rôle \Join_{id\_film=id} Film\]</div>
+</div></blockquote>
+<p>Regardons pour quelle version nous pouvons utiliser un index avec l’algorithme
+<code class="docutils literal notranslate"><span class="pre">IndexNestedLoop</span></code>.  Dans le premier cas, nous lisons des nuplets <code class="docutils literal notranslate"><span class="pre">film</span></code> (à gauche)
+et pour chaque film nous cherchons les rôles (à droite). Peut-on utiliser l’index
+sur rôle? Non, pour les raisons déjà expliquées dans la session 1:
+l’identifiant du film est un <em>suffixe</em>  de la clé de l’arbre B, et ce dernier
+est donc inopérant.</p>
+<p>Second cas: on lit des rôles (à gauche) et pour chaque rôle on cherche le film. Peut-on
+utiliser l’index sur film? Oui, bien sûr: on est dans le cas où on lit les nuplets
+de la table contenant la clé étrangère, et où on peut accéder par la clé primaire à la
+seconde table (revoir le chapitre <a class="reference internal" href="opalgo.html#chap-opalgo"><span class="std std-ref">Opérateurs et algorithmes</span></a> pour réviser les algorithmes
+de jointure si nécessaire). Nos règles de réécriture algébrique nous permettent
+de reformuler le plan d’exécution logique, en commutant la jointure.</p>
+<div class="math notranslate nohighlight">
+\[\pi_{titre}(\sigma_{nom\_rôle='John\ Ferguson'}(Rôle)  \Join_{id\_film=id}  \sigma_{annee=1958} (Film) )\]</div>
+<p>Et, plus important, nous pouvons maintenant implanter ce plan avec l’algorithme de jointures
+imbriquées indexées, ce qui donne l’arbre de la  <a class="reference internal" href="#planex-full1"><span class="std std-numref">Fig. 7.6</span></a>.</p>
+<figure class="align-center" id="id7">
+<span id="planex-full1"></span><a class="reference internal image-reference" href="_images/planEx-full1.png"><img alt="_images/planEx-full1.png" src="_images/planEx-full1.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.6 </span><span class="caption-text">Le plan d’exécution « standard »</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>L’opérateur de projection n’est pas montré sur les figures.  Il intervient
+de manière triviale comme racine du plan d’exécution complet.</p>
+</div>
+<p>Peut-on faire mieux? Oui, en créant des index. La première possibilité est de créer un index
+pour éviter un parcours séquentiel de la table gauche. Ici, on peut créer un index sur le nom
+du rôle, et remplacer l’opérateur de parcours séquentiel par la combinaison habituelle
+(<code class="docutils literal notranslate"><span class="pre">IndexScan</span></code> + <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>). Cela donne le plan de la  <a class="reference internal" href="#planex-full2"><span class="std std-numref">Fig. 7.7</span></a>.</p>
+<figure class="align-center" id="id8">
+<span id="planex-full2"></span><a class="reference internal image-reference" href="_images/planEx-full2.png"><img alt="_images/planEx-full2.png" src="_images/planEx-full2.png" style="width: 97%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.7 </span><span class="caption-text">Le plan d’exécution avec deux index</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Ce plan est certainement le meilleur, du moins si on prend
+comme critère la minimisation du temps de réponse et de la mémoire
+utilisée. Cela ne signifie pas qu’il faut créer des index à tort et
+à travers: la maintenance d’index a un coût, et ne se justifie que pour optimiser des requêtes
+fréquentes et lentes.</p>
+<p>Une autre possiblité pour faire mieux est de créer un index sur la <em>clé étrangère</em>,
+ce qui ouvre la possibilité d’effectuer les jointures dans n’importe quel ordre (pour
+les jointures « naturelles », celles qui associent clé primaire et clé étrangère). Certains
+systèmes (MySQL) le font d’ailleurs systématiquement.</p>
+<p>Si, donc, la table <code class="docutils literal notranslate"><span class="pre">Rôle</span></code> est indexée sur la clé primaire <code class="docutils literal notranslate"><span class="pre">(id_acteur,</span> <span class="pre">id_film)</span></code>  <em>et</em>
+sur la clé étrangère <code class="docutils literal notranslate"><span class="pre">id_film</span></code> (ce n’est pas redondant), un plan d’exécution possible est
+celui de la  <a class="reference internal" href="#planex-full3"><span class="std std-numref">Fig. 7.8</span></a>.</p>
+<figure class="align-center" id="id9">
+<span id="planex-full3"></span><a class="reference internal image-reference" href="_images/planEx-full3.png"><img alt="_images/planEx-full3.png" src="_images/planEx-full3.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.8 </span><span class="caption-text">Le plan d’exécution avec index sur les clés étrangères</span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Ce plan est comparable à celui de la <a class="reference internal" href="#planex-full1"><span class="std std-numref">Fig. 7.6</span></a>. Lequel des deux
+serait choisi par le système? En principe, on choisirait comme table de gauche
+celle qui contient le <em>moins</em> de nuplets, pour minimiser le nombre de demandes
+de lectures adressées à l’index. Mais il se peut d’un autre côté que cette table, tout
+en contenant moins de nuplets, soit beaucoup plus volumineuse et que
+sa lecture séquentielle soit considérée comme trop pénalisante. Ici, statistiques
+et évaluation du coût entrent en jeu.</p>
+<p>On pourrait finalement créer un index sur l’année sur film pour éviter
+tout parcours séquentiel: à vous de déterminer
+le plan d’exécution qui correspond à ce scénario.</p>
+<p>Finalement, considérons le cas où aucun index n’est disponible. Pour notre exemple,
+cela correspondrait à une sévère anomalie puisqu’il manquerait
+un index sur la clé primaire. Toujours est-il que dans un tel cas le système
+doit déterminer l’algorithme de jointure sans index qui convient. La  <a class="reference internal" href="#planex-full4"><span class="std std-numref">Fig. 7.9</span></a>
+illustre le cas où c’est l’agorithme de tri-fusion qui est choisi.
+La jointure par hachage est une alternative, sans doute préférable d’ailleurs
+si la mémoire RAM est suffisante.</p>
+<figure class="align-center" id="id10">
+<span id="planex-full4"></span><a class="reference internal image-reference" href="_images/planEx-full4.png"><img alt="_images/planEx-full4.png" src="_images/planEx-full4.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.9 </span><span class="caption-text">Le plan d’exécution en l’absence d’index</span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La présence de l’algorithme de tri-fusion pour une jointure doit alerter sur l’absence d’index
+et la probable nécessité d’en créer un.</p>
+</section>
+<section id="arbres-en-profondeur-a-gauche">
+<h3>Arbres en profondeur à gauche<a class="headerlink" href="#arbres-en-profondeur-a-gauche" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Pour conclure cette section sur l’optimisation, on peut généraliser l’approche présentée
+dans ce qui précède au cas des requêtes multi-jointures,
+où de plus chaque jointure est « naturelle » et associe la clé primaire d’une table à la clé
+étrangère de l’autre. Voici un exemple sur notre schéma: on cherche tous
+les films dans lesquels figure un acteur islandais.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">Film</span><span class="p">,</span> <span class="n">Rôle</span><span class="p">,</span> <span class="n">Artiste</span><span class="p">,</span> <span class="n">Pays</span>
+<span class="k">where</span> <span class="n">Pays</span><span class="p">.</span><span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Islande&#39;</span>
+<span class="k">and</span>   <span class="n">Film</span><span class="p">.</span><span class="n">id</span><span class="o">=</span><span class="n">Rôle</span><span class="p">.</span><span class="n">id_film</span>
+<span class="k">and</span>   <span class="n">Rôle</span><span class="p">.</span><span class="n">id_acteur</span><span class="o">=</span><span class="n">Artiste</span><span class="p">.</span><span class="n">id</span>
+<span class="k">and</span>   <span class="n">Artiste</span><span class="p">.</span><span class="n">pays</span> <span class="o">=</span> <span class="n">Pays</span><span class="p">.</span><span class="n">code</span>
+</pre></div>
+</div>
+<p>Ces requêtes comprenant beaucoup de jointures sont courantes, et le fait qu’elles
+soient naturelles est également courant, pour des raisons déjà expliquées.</p>
+<p>Quel est le plan d’exécution typique? Une stratégie assez standard de l’optimiseur va être d’éviter
+les opérateurs bloquants et la consommation de mémoire. Cela mène à chercher, le plus
+systématiquement possible, à appliquer l’opérateur de jointure par boucles imbriquées indexées.
+Il se trouve que pour les requêtes considérées ici, c’est toujours possible. En fait, on
+peut représenter ce type de requête par une « chaîne » de jointures naturelles. Ici, on a
+(en ne considérant pas les sélections):</p>
+<div class="math notranslate nohighlight">
+\[Film \Join Rôle \Join Artiste \Join Pays\]</div>
+<p>Il faut lire au moins une des tables séquentiellement pour « amorcer » la cascade des
+jointures par boucles imbriquées. Mais, pour toutes les autres tables, un accès par
+index devient possible. Sur notre exemple, le bon ordre des jointures est</p>
+<div class="math notranslate nohighlight">
+\[Artiste \Join Pays \Join Rôle \Join Film\]</div>
+<p>Le plan d’exécution consistant en une lecture séquentielle suivi de boucles imbriquées
+indexées est donné sur la  <a class="reference internal" href="#planex-lefttree"><span class="std std-numref">Fig. 7.10</span></a>. Il reste bien sûr à le compléter. Mais
+l’aspect important est que ce plan fonctionne entièrement en mode pipelinage, sans latence
+pour l’application.  Il exploite au maximum la possibilité d’utiliser les index, et minimise
+la taille de la mémoire nécessaire.</p>
+<figure class="align-center" id="id11">
+<span id="planex-lefttree"></span><a class="reference internal image-reference" href="_images/planEx-lefttree.png"><img alt="_images/planEx-lefttree.png" src="_images/planEx-lefttree.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.10 </span><span class="caption-text">Le plan d’exécution avec algorithme de jointure indexée généralisé</span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Ce plan a la forme caractéristique d’un <em>arbre en profondeur à gauche</em> ( »<em>left-deep tree</em> »). C’est
+celle qui est recherchée classiquement par un optimiseur, et la forme de base que vous
+devriez retenir comme point de repère pour étudier un plan d’exécution. En
+présence d’une
+requête présentant les caractéristiques d’une chaîne de jointure, c’est la forme
+de référence, dont on ne devrait dévier que dans des cas explicables par la présence
+d’index complémentaires, de tables très petites, etc.</p>
+<p>Ce plan (le sous-plan de la    <a class="reference internal" href="#planex-lefttree"><span class="std std-numref">Fig. 7.10</span></a>) fournit un nuplet, et autant
+<em>d’adresses</em> de nuplets qu’il y a de jointures et donc d’accès aux index. Il faut ensuite
+ajouter autant d’opérateurs <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>, ainsi que les opérateurs de sélection nécessaires
+(ici sur le nom du pays). Essayez par exemple, à titre d’exercice, de compléter le
+plan de la  <a class="reference internal" href="#planex-lefttree"><span class="std std-numref">Fig. 7.10</span></a> pour qu’il corresponde complètement
+à la requête.</p>
+</section>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>La relation <code class="docutils literal notranslate"><span class="pre">Rôle(id_acteur,</span> <span class="pre">id_film,</span> <span class="pre">nom_rôle)</span></code> a pour clé primaire la paire
+d’attributs <code class="docutils literal notranslate"><span class="pre">(id_acteur,</span> <span class="pre">id_film)</span></code>. Sachant que le système construit un arbre B
+sur cette clé, laquelle parmi les requêtes suivantes ne peut pas utiliser l’index ?</p>
+<div class="reauthoring_embedded_quiz" id="optimQ11"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">Rôle</span> <span class="pre">where</span> <span class="pre">id_acteur</span> <span class="pre">=</span> <span class="pre">x</span> <span class="pre">and</span> <span class="pre">id_film=y</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">Rôle</span> <span class="pre">where</span> <span class="pre">id_acteur</span> <span class="pre">=</span> <span class="pre">x</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">Rôle</span> <span class="pre">where</span> <span class="pre">id_film=y</span></code></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En déduire pourquoi le bon ordre de jointure entre les tables Film et Rôle est celui exposé en cours.</p>
+</li>
+<li><p>Dans le plan d’exécution de la requête suivante, comment pourrait–on éviter tout parcours séquentiel ?</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Rôle</span> <span class="n">r</span><span class="p">,</span> <span class="n">Artiste</span> <span class="n">a</span>
+<span class="k">where</span>  <span class="n">a</span><span class="p">.</span><span class="n">nom</span> <span class="o">=</span> <span class="s1">&#39;Stewart&#39;</span> <span class="k">and</span> <span class="n">a</span><span class="p">.</span><span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;James&#39;</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">id_film</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_film</span>
+<span class="k">and</span>    <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">idArtiste</span>
+<span class="k">and</span>    <span class="n">f</span><span class="p">.</span><span class="n">annee</span> <span class="o">=</span> <span class="mi">1958</span>
+</pre></div>
+</div>
+<div class="reauthoring_embedded_quiz" id="optimQ12"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  En créant un index sur la clé étrangère <code class="docutils literal notranslate"><span class="pre">id_film</span></code> dans Rôle.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> En créant un index sur le nom et le prénom des artistes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  En créant un index sur l’année de Film.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s4-illustration-avec-oracle">
+<h2>S4: illustration avec Oracle<a class="headerlink" href="#s4-illustration-avec-oracle" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Cette section présente l’application concrète des concepts,
+structures et algorithmes présentés dans ce qui précède
+avec le SGBD Oracle. Ce système est un  bon exemple
+d’un optimiseur sophistiqué s’appuyant sur des structures
+d’index et des algorithmes d’évaluation  complets.
+Tous les algorithmes de jointure décrits dans ce cours
+(boucles imbriquées, tri-fusion, hachage, boucles
+imbriquées indexées) sont en effet implantés dans Oracle.
+De plus le système propose des outils simples et pratiques
+(<code class="docutils literal notranslate"><span class="pre">explain</span></code> notamment) pour analyser le plan d’exécution choisi
+par l’optimiseur, et obtenir des statistiques sur les
+performances (coût en E/S et coût CPU, entre autres).</p>
+<p>Tous les SGBD relationnel proposent un outil comparable
+d’explication des plans d’exécution choisis. Les travaux
+pratique nous permettrons d’utiliser celui d’oracle, mais aussi celui
+de Postgres.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Pour utiliser Oracle en ligne le site <a class="reference external" href="https://apex.oracle.com/en/">https://apex.oracle.com/en/</a>
+est recommandé.  Sans installation, et gratuit pour des petites bases.</p>
+</div>
+<section id="parametres-et-statistiques">
+<h3>Paramètres et statistiques<a class="headerlink" href="#parametres-et-statistiques" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’optimiseur s’appuie sur des paramètres divers et sur
+des statistiques.
+Parmi les paramètres les plus intéressants, citons:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">OPTIMIZER_MODE</span></code>:  permet  d’indiquer si le coût
+considéré est le temps de réponse (temps
+pour obtenir la première ligne du résultat),
+<code class="docutils literal notranslate"><span class="pre">FIRST_ROW</span></code> ou le temps d’exécution total <code class="docutils literal notranslate"><span class="pre">ALL_ROWS</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SORT_AREA_SIZE</span></code> indique la taille de la  mémoire affectée à l’opérateur de tri.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HASH_AREA_SIZE</span></code> indique la taille de la  mémoire affectée à l’opérateur de hachage.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HASH_JOIN_ENABLED</span></code> indique que l’optimiseur considère les jointures par hachage.</p></li>
+</ul>
+</div></blockquote>
+<p>L’administrateur de la base est responsable
+de la tenue à jour des statistiques.
+Pour analyser une table on utilise la commande <code class="docutils literal notranslate"><span class="pre">analyze</span> <span class="pre">table</span></code>
+qui produit la taille de la
+table (nombre de lignes) et le nombre
+de blocs utilisés. Cette information est utile
+par exemple au moment d’une jointure pour
+utiliser comme table externe la plus petite des deux.
+Voici un exemple de la commande.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">analyze</span> <span class="k">table</span> <span class="n">Film</span> <span class="n">compute</span> <span class="k">statistics</span> <span class="k">for</span> <span class="k">table</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>On trouve alors des informations statistiques
+dans les vues <code class="docutils literal notranslate"><span class="pre">dba_tables</span></code>, <code class="docutils literal notranslate"><span class="pre">all_tables</span></code>, <code class="docutils literal notranslate"><span class="pre">user_tables</span></code>.  Par exemple:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">NUM_ROWS</span></code>, le  nombre de lignes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BLOCKS</span></code>, le nombre de blocs.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CHAin_CNT</span></code>, le nombre de blocs chaînés.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AVG_ROW_LEN</span></code>, la taille moyenne d’une ligne.</p></li>
+</ul>
+</div></blockquote>
+<p>On peut également analyser les index d’une table, ou
+un index en particulier. Voici les deux commandes
+correspondantes.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">analyze</span> <span class="k">table</span> <span class="n">Film</span> <span class="n">compute</span> <span class="k">statistics</span> <span class="k">for</span> <span class="k">all</span> <span class="n">indexes</span><span class="p">;</span>
+<span class="k">analyze</span> <span class="k">index</span> <span class="n">PKFilm</span> <span class="n">compute</span> <span class="k">statistics</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Les informations statistiques sont placées  dans les vues
+<code class="docutils literal notranslate"><span class="pre">dba_index</span></code>, <code class="docutils literal notranslate"><span class="pre">all_index</span></code> et <code class="docutils literal notranslate"><span class="pre">user_indexes</span></code>.</p>
+<p>Pour finir on peut calculer des statistiques sur
+des colonnes. Oracle utilise des histogrammes en hauteur
+pour représenter
+la distribution des valeurs d’un champ.
+Il est évidemment inutile d’analyser toutes les colonnes. Il faut
+se contenter des colonnes qui ne sont pas des clés uniques,
+et qui sont indexées. Voici un exemple
+de la commande d’analyse pour créer des histogrammes
+avec vingt groupes sur les colonnes <code class="docutils literal notranslate"><span class="pre">titre</span></code>
+et <code class="docutils literal notranslate"><span class="pre">genre</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">analyze</span> <span class="k">table</span> <span class="n">Film</span> <span class="n">compute</span> <span class="k">statistics</span> <span class="k">for</span> <span class="n">columns</span> <span class="n">titre</span><span class="p">,</span> <span class="n">genre</span> <span class="k">size</span> <span class="mi">20</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>On peut remplacer <code class="docutils literal notranslate"><span class="pre">compute</span></code> par <code class="docutils literal notranslate"><span class="pre">estimate</span></code> pour
+limiter le coût de l’analyse. Oracle prend alors un échantillon
+de la table, en principe représentatif (on sait ce que valent les sondages!).
+Les informations sont stockées
+dans les vues <code class="docutils literal notranslate"><span class="pre">dba_tab_col_statistics</span></code> et
+<code class="docutils literal notranslate"><span class="pre">dba_part_col_statistics</span></code>.</p>
+</section>
+<section id="plans-d-execution-oracle">
+<h3>Plans d’exécution Oracle<a class="headerlink" href="#plans-d-execution-oracle" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous en arrivons maintenant à la présentation des plans
+d’exécution d’Oracle, tels qu’ils sont donnés par l’utilitaire <code class="docutils literal notranslate"><span class="pre">explain</span></code>.
+Ces plans ont classiquement la forme d’arbres en
+profondeur à gauche (voir la section précédente), chaque nœud étant un opérateur,
+les nœuds-feuille représentant les accès aux
+structures de la base, tables, index, <em>cluster</em>, etc.</p>
+<p>Le vocabulaire de l’optimiseur pour désigner les opérateurs est un peu différent
+de celui utilisé jusqu’ici dans ce chapitre. La
+liste ci-dessous donne les principaux, en commençant par
+les chemins d’accès, puis les algorithmes de jointure,
+et enfin des opérations diverses de manipulation
+d’enregistrements.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">FULL</span> <span class="pre">TABLE</span> <span class="pre">SCAN</span></code>, notre opérateur <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ACCESS</span> <span class="pre">BY</span> <span class="pre">ROWID</span></code>, notre opérateur <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">INDEX</span> <span class="pre">SCAN</span></code>, notre opérateur <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NESTED</span> <span class="pre">LOOP</span></code>, notre opérateur <code class="docutils literal notranslate"><span class="pre">inL</span></code> de  boucles imbriquées indexées, utilisé quand il y a au moins un index.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SORT/MERGE</span></code>, algorithme de tri-fusion.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HASH</span> <span class="pre">JOIN</span></code>, jointure par hachage.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">inTERSECTION</span></code>, intersection de deux ensembles d’enregistrements.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CONCATENATION</span></code>, union de deux ensembles.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FILTER</span></code>,  élimination d’enregistrements (utilisé dans un négation).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">select</span></code>, opération de projection (et oui …).</p></li>
+</ul>
+</div></blockquote>
+<p>Voici un petit échantillon de requêtes sur notre base
+en donnant à chaque fois le plan
+d’exécution choisi par Oracle. Les plans sont obtenus
+en préfixant la requête à analyser par <code class="docutils literal notranslate"><span class="pre">explain</span> <span class="pre">plan</span></code>
+accompagné de l’identifiant à donner au plan d’exécution. La
+description du plan d’exécution est alors stockée dans une table utilitaire et
+le plan peut être affiché de différentes manières. Nous donnons
+la représentation la plus courante, dans laquelle l’arborescence
+est codée par l’indentation des lignes.</p>
+<p>La première requête est une sélection sur un attribut
+non indexé.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">explain</span> <span class="n">plan</span>
+<span class="k">set</span> <span class="n">statement_id</span><span class="o">=</span><span class="s1">&#39;SelSansInd&#39;</span> <span class="k">for</span>
+<span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span>
+</pre></div>
+</div>
+<p>On obtient le plan d’exécution nommé <code class="docutils literal notranslate"><span class="pre">SelSansInd</span></code> dont l’affichage est donné ci-dessous.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="mi">0</span> <span class="k">SELECT</span> <span class="k">STATEMENT</span>
+  <span class="mi">1</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">FULL</span> <span class="n">FILM</span>
+</pre></div>
+</div>
+<p>Oracle effectue donc un balayage complet de la table <code class="docutils literal notranslate"><span class="pre">Film</span></code>.
+L’affichage représente l’arborescence du plan d’exécution par une
+indentation. Pour plus de clarté, nous donnons également l’arbre
+complet (<a class="reference internal" href="#planora-selsansind"><span class="std std-numref">Fig. 7.11</span></a>) avec les conventions utilisées
+jusqu’à présent.</p>
+<figure class="align-center" id="id12">
+<span id="planora-selsansind"></span><a class="reference internal image-reference" href="_images/planOra-selsansind.png"><img alt="_images/planOra-selsansind.png" src="_images/planOra-selsansind.png" style="width: 20%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.11 </span><span class="caption-text">Plan Oracle pour une requête sans index</span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le plan est trivial.
+L’opérateur de parcours séquentiel extrait un à un les enregistrements
+de la table <code class="docutils literal notranslate"><span class="pre">Film</span></code>. Un filtre (jamais montré dans les plans
+donnés par <code class="docutils literal notranslate"><span class="pre">explain</span></code>, car intégré aux opérateurs d’accès aux données)
+élimine tous ceux dont le titre n’est pas <em>Vertigo</em>. Pour ceux
+qui passent le filtre, un opérateur de projection (malencontreusement
+nommé  <code class="docutils literal notranslate"><span class="pre">select</span></code> dans Oracle …)  ne conserve que les champs non
+désirés.</p>
+<p>Voici maintenant une sélection avec index sur la table
+<code class="docutils literal notranslate"><span class="pre">Film</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">explain</span> <span class="n">plan</span>
+<span class="k">set</span> <span class="n">statement_id</span><span class="o">=</span><span class="s1">&#39;SelInd&#39;</span> <span class="k">for</span>
+<span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span> <span class="n">id</span><span class="o">=</span><span class="mi">21</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Le plan d’exécution obtenu est:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="mi">0</span> <span class="k">SELECT</span> <span class="k">STATEMENT</span>
+ <span class="mi">1</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">BY</span> <span class="n">ROWID</span> <span class="n">FILM</span>
+  <span class="mi">2</span> <span class="k">INDEX</span> <span class="k">UNIQUE</span> <span class="n">SCAN</span> <span class="n">IDX</span><span class="o">-</span><span class="n">FILM</span><span class="o">-</span><span class="n">ID</span>
+</pre></div>
+</div>
+<p>L’optimiseur a détecté la présence d’un index unique sur la table
+<code class="docutils literal notranslate"><span class="pre">Film</span></code>. La traversée de cet index donne un <code class="docutils literal notranslate"><span class="pre">ROWID</span></code>
+qui est ensuite utilisé pour un accès direct à
+la table (<a class="reference internal" href="#planora-selind"><span class="std std-numref">Fig. 7.12</span></a>).</p>
+<figure class="align-center" id="id13">
+<span id="planora-selind"></span><a class="reference internal image-reference" href="_images/planOra-selind.png"><img alt="_images/planOra-selind.png" src="_images/planOra-selind.png" style="width: 40%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.12 </span><span class="caption-text">Plan Oracle pour une requête avec index</span><a class="headerlink" href="#id13" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Passons maintenant aux jointures.  La requête donne
+les titres des films avec les nom et prénom
+de leur metteur en scène, ce qui implique
+une jointure entre <code class="docutils literal notranslate"><span class="pre">Film</span></code> et <code class="docutils literal notranslate"><span class="pre">Artiste</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">explain</span> <span class="n">plan</span>
+<span class="k">set</span> <span class="n">statement_id</span><span class="o">=</span><span class="s1">&#39;JoinIndex&#39;</span> <span class="k">for</span>
+<span class="k">select</span> <span class="n">titre</span><span class="p">,</span> <span class="n">nom</span><span class="p">,</span> <span class="n">prénom</span>
+<span class="k">from</span>   <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Artiste</span> <span class="n">a</span>
+<span class="k">where</span> <span class="n">f</span><span class="p">.</span><span class="n">id_realisateur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">id</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Le plan d’exécution obtenu est le suivant: il s’agit d’une jointure
+par boucles imbriquées indexées.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="mi">0</span> <span class="k">SELECT</span> <span class="k">STATEMENT</span>
+  <span class="mi">1</span> <span class="n">NESTED</span> <span class="n">LOOPS</span>
+    <span class="mi">2</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">FULL</span> <span class="n">FILM</span>
+    <span class="mi">3</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">BY</span> <span class="n">ROWID</span> <span class="n">ARTISTE</span>
+      <span class="mi">4</span> <span class="k">INDEX</span> <span class="k">UNIQUE</span> <span class="n">SCAN</span> <span class="n">IDXARTISTE</span>
+</pre></div>
+</div>
+<p>Vous devriez pour décrypter ce plan est le reconnaître: c’est celui, discuté
+assez longuement déjà, de la jointure imbriquée indexée. Pour mémoire, il
+correspond à la figure suivante, très proche de celle
+du chapitre  <a class="reference internal" href="opalgo.html#chap-opalgo"><span class="std std-ref">Opérateurs et algorithmes</span></a>.</p>
+<figure class="align-center" id="id14">
+<a class="reference internal image-reference" href="_images/planEx-indexedjoinOracle.png"><img alt="_images/planEx-indexedjoinOracle.png" src="_images/planEx-indexedjoinOracle.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.13 </span><span class="caption-text">Plan Oracle pour une requête avec index</span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Ré-expliquons une nouvelle fois. Tout d’abord
+la table qui n’est pas indexée sur l’attribut
+de jointure (ici, <code class="docutils literal notranslate"><span class="pre">Film</span></code>) est parcourue
+séquentiellement. Le nœud <code class="docutils literal notranslate"><span class="pre">IndexJoin</span></code> (appelé <code class="docutils literal notranslate"><span class="pre">NESTED</span> <span class="pre">LOOPS</span></code> par Oracle)
+récupère les enregistrements <code class="docutils literal notranslate"><span class="pre">film</span></code> un par
+un du côté gauche. Pour chaque film on va
+alors récupérer l’artiste correspondant avec
+le sous-arbre du côté droit.</p>
+<p>On effectue alors une recherche par clé dans l’index avec
+la valeur <code class="docutils literal notranslate"><span class="pre">id_realisateur</span></code> provenant du film courant. La recherche
+renvoie un <code class="docutils literal notranslate"><span class="pre">ROWID</span></code> qui est  utilisé pour
+prendre l’enregistrement complet dans la table <code class="docutils literal notranslate"><span class="pre">Artiste</span></code>. Le nœud
+de jointure récupère cet enregistrement et l’associe au film.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Par rapport à la version de cet algorithme présenté précédemment,
+ORACLE choisit d’effectuer le <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code> immédiatement après le
+parcours d’index (alors que nous avons montré une version où il avait lieu
+après la jointure). Cela reste fondamentalement le même algorithme.</p>
+</div>
+<p>Dans certains cas on peut éviter le parcours séquentiel à
+gauche de la jointure par boucles imbriquées, si une sélection
+supplémentaire sur un attribut indexé est exprimée. L’exemple
+ci-dessous sélectionne tous les rôles jouées par Al Pacino, et suppose
+qu’il existe un index sur les noms des artistes qui permet
+d’optimiser la recherche par nom. L’index sur la
+table <code class="docutils literal notranslate"><span class="pre">Rôle</span></code> est la concaténation des
+champs <code class="docutils literal notranslate"><span class="pre">id_acteur</span></code> et <code class="docutils literal notranslate"><span class="pre">id_film</span></code>, ce qui
+permet de faire une recherche par intervalle
+sur le préfixe constitué seulement de <code class="docutils literal notranslate"><span class="pre">id_acteur</span></code>.
+La requête est donnée ci-dessous.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">explain</span> <span class="n">plan</span>
+<span class="k">set</span> <span class="n">statement_id</span><span class="o">=</span><span class="s1">&#39;JoinSelIndex&#39;</span> <span class="k">for</span>
+<span class="k">select</span> <span class="n">nom_rôle</span>
+<span class="k">from</span>   <span class="n">Rôle</span> <span class="n">r</span><span class="p">,</span> <span class="n">Artiste</span> <span class="n">a</span>
+<span class="k">where</span>  <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">id</span>
+<span class="k">and</span>    <span class="n">nom</span> <span class="o">=</span> <span class="s1">&#39;Pacino&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Et voici le plan d’exécution.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="mi">0</span> <span class="k">SELECT</span> <span class="k">STATEMENT</span>
+  <span class="mi">1</span> <span class="n">NESTED</span> <span class="n">LOOPS</span>
+    <span class="mi">2</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">BY</span> <span class="n">ROWID</span> <span class="n">ARTISTE</span>
+      <span class="mi">3</span> <span class="k">INDEX</span> <span class="n">RANGE</span> <span class="n">SCAN</span> <span class="n">IDX</span><span class="o">-</span><span class="n">NOM</span>
+    <span class="mi">4</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">BY</span> <span class="n">ROWID</span> <span class="k">ROLE</span>
+      <span class="mi">5</span> <span class="k">INDEX</span> <span class="n">RANGE</span> <span class="n">SCAN</span> <span class="n">IDX</span><span class="o">-</span><span class="k">ROLE</span>
+</pre></div>
+</div>
+<p>Notez bien que les deux recherches dans les index s’effectuent
+par intervalle (<code class="docutils literal notranslate"><span class="pre">INDEX</span> <span class="pre">RANGE</span></code>), et peuvent donc ramener plusieurs <code class="docutils literal notranslate"><span class="pre">ROWID</span></code>.
+Dans les deux cas on utilise en effet seulement une
+partie des champs définissant l’index (et cette partie
+constitue un préfixe, ce qui est impératif).
+On peut donc envisager de trouver plusieurs
+artistes nommé Pacino (avec des prénoms différents),
+et pour un artiste, on peut trouver plusieurs rôles
+(mais pas pour le même film). Tout cela résulte de la
+conception de la base.</p>
+<figure class="align-center" id="id15">
+<span id="planora-joinselindex"></span><a class="reference internal image-reference" href="_images/planOra-joinselindex.png"><img alt="_images/planOra-joinselindex.png" src="_images/planOra-joinselindex.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.14 </span><span class="caption-text">Plan Oracle pour une jointure et sélection avec index</span><a class="headerlink" href="#id15" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Pour finir voici une requête sans index. On veut trouver
+tous les artistes nés l’année de parution de <code class="docutils literal notranslate"><span class="pre">Vertigo</span></code>
+(et pourquoi pas?). La requête est donnée ci-dessous:
+elle effectue une jointure sur les années de parution
+des films et l’année de naissance des artistes.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">explain</span> <span class="n">plan</span> <span class="k">set</span>
+<span class="n">statement_id</span><span class="o">=</span><span class="s1">&#39;JoinSansIndex&#39;</span> <span class="k">for</span>
+<span class="k">select</span> <span class="n">nom</span><span class="p">,</span> <span class="n">prénom</span>
+<span class="k">from</span> <span class="n">Film</span> <span class="n">f</span><span class="p">,</span> <span class="n">Artiste</span> <span class="n">a</span>
+<span class="k">where</span> <span class="n">f</span><span class="p">.</span><span class="n">annee</span>  <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">annee_naissance</span>
+<span class="k">and</span>   <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Comme
+il n’existe pas d’index sur ces champs, Oracle applique
+un algorithme de tri-fusion, et on obtient le plan d’exécution
+suivant.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="mi">0</span> <span class="k">SELECT</span> <span class="k">STATEMENT</span>
+  <span class="mi">1</span> <span class="n">MERGE</span> <span class="k">JOIN</span>
+    <span class="mi">2</span> <span class="n">SORT</span> <span class="k">JOIN</span>
+      <span class="mi">3</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">FULL</span> <span class="n">ARTISTE</span>
+    <span class="mi">4</span> <span class="n">SORT</span> <span class="k">JOIN</span>
+      <span class="mi">5</span> <span class="k">TABLE</span> <span class="k">ACCESS</span> <span class="k">FULL</span> <span class="n">FILM</span>
+</pre></div>
+</div>
+<p>L’arbre de la <a class="reference internal" href="#planora-joinsansindex"><span class="std std-numref">Fig. 7.15</span></a> montre
+bien les deux tris, suivis de la fusion. Au moment du
+parcours séquentiel, on va filtrer tous les films
+dont le titre n’est pas <code class="docutils literal notranslate"><span class="pre">Vertigo</span></code>, ce qui va
+certainement beaucoup simplifier le calcul de ce côté-là.
+En revanche le tri des artistes risque d’être beaucoup
+plus coûteux.</p>
+<figure class="align-center" id="id16">
+<span id="planora-joinsansindex"></span><a class="reference internal image-reference" href="_images/planOra-joinsansindex.png"><img alt="_images/planOra-joinsansindex.png" src="_images/planOra-joinsansindex.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 7.15 </span><span class="caption-text">Plan Oracle pour une jointure sans  index</span><a class="headerlink" href="#id16" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Dans un cas comme celui-là, on peut envisager de créer un index
+sur  les années de parution ou
+sur les années de naissance. Un seul index suffira, puisqu’il
+devient alors possible d’effectuer une jointure par boucles
+imbriquées.</p>
+<p>Outre l’absence d’index, il existe de nombreuses
+raisons pour qu’Oracle ne puisse pas utiliser un index:
+par exemple quand on applique une fonction au moment
+de la comparaison. Il faut être attentif à ce genre
+de détail, et utiliser <code class="docutils literal notranslate"><span class="pre">explain</span></code> pour vérifier
+le plan d’exécution quand une requête s’exécute sur un temps
+anormalement long.</p>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Les exercices sont essentiellement des études de plan d’exécution, pour
+lesquels nous utilisons la syntaxe expliquée dans le contexte d’Oracle.
+Vous pouvez également produire des diagrammes assez facilement avec <a class="reference external" href="https://www.lucidchart.com">https://www.lucidchart.com</a>
+si vous préférez.</p>
+<div class="admonition-exercice-ex-planex1-definir-des-plans-d-execution admonition" id="ex-planex1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-planex1">ex-planex1</a>: définir des plans d’exécution</p>
+<blockquote>
+<div><p>Donner le meilleur plan d’exécution pour les requêtes suivantes,
+en supposant qu’il existe un index sur la clé primaire de la table <code class="docutils literal notranslate"><span class="pre">idFilm</span></code>.
+Essayez d’identifier les  requêtes qui peuvent s’évaluer uniquement
+avec l’index. Inversement, identifier celles pour lesquelles l’index est inutile.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">idFilm</span> <span class="o">=</span> <span class="mi">20</span> <span class="k">and</span> <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span><span class="p">;</span>
+
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">idFilm</span> <span class="o">=</span> <span class="mi">20</span> <span class="k">or</span> <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span><span class="p">;</span>
+
+<span class="k">select</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">from</span> <span class="n">Film</span><span class="p">;</span>
+
+<span class="k">select</span> <span class="k">MAX</span><span class="p">(</span><span class="n">idFilm</span><span class="p">)</span> <span class="k">from</span> <span class="n">Film</span><span class="p">;</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-planex2-encore-des-plans-d-execution admonition" id="ex-planex2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-planex2">ex-planex2</a>: encore des plans d’exécution</p>
+<blockquote>
+<div><p>Soit le schéma relationnel :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Journaliste (<strong>jid</strong>, nom, prénom)</p></li>
+<li><p>Journal (<strong>titre</strong>, rédaction, id_rédacteur)</p></li>
+</ul>
+</div></blockquote>
+<p>La table <code class="docutils literal notranslate"><span class="pre">Journaliste</span></code> stocke les informations (nom, prénom) sur les
+journalistes (<code class="docutils literal notranslate"><span class="pre">jid</span></code>  est le numéro d’identification du journaliste).
+La table <code class="docutils literal notranslate"><span class="pre">Journal</span></code> stocke pour chaque rédaction d’un journal
+le titre du journal (titre), le nom de la rédaction (rédaction) et l’id
+de son rédacteur (<code class="docutils literal notranslate"><span class="pre">id_rédacteur</span></code>). .
+On a un arbre B dense sur la table <code class="docutils literal notranslate"><span class="pre">Journaliste</span></code> sur l’attribut <code class="docutils literal notranslate"><span class="pre">jid</span></code>,
+et un index sur la titre du journal.</p>
+<p>On  considère la requête suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">nom</span>
+<span class="k">from</span> <span class="n">Journal</span><span class="p">,</span> <span class="n">Journaliste</span>
+<span class="k">where</span> <span class="n">titre</span><span class="o">=</span><span class="s1">&#39;Le Monde&#39;</span>
+<span class="k">and</span> <span class="n">jid</span><span class="o">=</span><span class="n">id_redacteur</span>
+<span class="k">and</span> <span class="n">prénom</span><span class="o">=</span><span class="s1">&#39;Jean&#39;</span>
+</pre></div>
+</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul>
+<li><p>Voici deux expressions algébriques:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\pi_{nom}(\sigma_{titre='Le\,Monde' \land prenom='Jean'}(Journaliste \Join_{jid=id\_redacteur} Journal))\]</div>
+</div></blockquote>
+<p>et</p>
+<div class="math notranslate nohighlight">
+\[\pi_{nom}(\sigma_{prenom='Jean'}(Journaliste) \Join_{jid=id\_redacteur} \sigma_{titre='Le\,Monde'}(Journal))\]</div>
+<p>Les deux expressions retournent-elles le même résultat (sont-elles
+équivalentes)?  Justifiez votre réponse en indiquant les règles
+de réécriture que l’on peut appliquer.</p>
+</li>
+<li><p>Une expression vous semble-t-elle meilleure que
+l’autre si on les  considère comme des plans d’exécution?</p></li>
+<li><p>Donner le plan d’exécution physique qui vous semble le meilleur,
+utilisant les index autant que possible, sous forme
+arborescente ou sous forme d’une expression EXPLAin, et expliquez en détail ce plan.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-planex3-toujours-des-plans-d-execution admonition" id="ex-planex3">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-planex3">ex-planex3</a>: toujours des plans d’exécution</p>
+<blockquote>
+<div><p>Soit la base d’une société d’informatique décrivant les clients,
+les logiciels vendus, et les licences indiquant qu’un client a
+acquis un logiciel.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Société (<strong>id</strong>, intitulé)</p></li>
+<li><p>Logiciel (<strong>id</strong>, nom)</p></li>
+<li><p>Licence (<strong>idLogiciel, idSociété</strong>, durée)</p></li>
+</ul>
+</div></blockquote>
+<p>Bien entendu un index unique est créé  sur les clés primaires.
+Pour chacune des requêtes suivantes, donner le plan d’exécution qui vous semble le meilleur.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">intitulé</span>
+<span class="k">from</span>  <span class="n">Société</span><span class="p">,</span> <span class="n">Licence</span>
+<span class="k">where</span> <span class="n">durée</span> <span class="o">=</span> <span class="mi">15</span>
+<span class="k">and</span>   <span class="n">id</span> <span class="o">=</span> <span class="n">idSociete</span><span class="p">;</span>
+
+<span class="k">select</span> <span class="n">intitule</span>
+<span class="k">from</span>  <span class="n">Société</span><span class="p">,</span> <span class="n">Licence</span><span class="p">,</span> <span class="n">Logiciel</span>
+<span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;EKIP&#39;</span>
+<span class="k">and</span>   <span class="n">Société</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">idSociete</span>
+<span class="k">and</span>   <span class="n">Logiciel</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">idLogiciel</span><span class="p">;</span>
+
+<span class="k">select</span> <span class="n">intitule</span>
+<span class="k">from</span>  <span class="n">Société</span><span class="p">,</span> <span class="n">Licence</span>
+<span class="k">where</span> <span class="n">Société</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">idSociete</span>
+<span class="k">and</span>   <span class="n">idLogiciel</span> <span class="k">in</span> <span class="p">(</span><span class="k">select</span> <span class="n">id</span> <span class="k">from</span> <span class="n">Logiciel</span>
+                    <span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;EKIP&#39;</span><span class="p">)</span>
+
+<span class="k">select</span> <span class="n">intitule</span>
+<span class="k">from</span>  <span class="n">Société</span> <span class="n">s</span><span class="p">,</span> <span class="n">Licence</span> <span class="k">c</span>
+<span class="k">where</span> <span class="n">s</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="k">c</span><span class="p">.</span><span class="n">idSociete</span>
+<span class="k">and</span> <span class="k">exists</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Logiciel</span> <span class="n">l</span>
+            <span class="k">where</span> <span class="n">nom</span><span class="o">=</span><span class="s1">&#39;EKIP&#39;</span> <span class="k">and</span> <span class="k">c</span><span class="p">.</span><span class="n">idLogiciel</span><span class="o">=</span><span class="n">l</span><span class="p">.</span><span class="n">idLogiciel</span><span class="p">)</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-optim1-plans-d-execution-oracle admonition" id="ex-optim1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-optim1">ex-optim1</a>:  plans d’exécution Oracle</p>
+<blockquote>
+<div><p>On prend les tables suivantes, abondamment utilisées
+par Oracle dans sa documentation:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Emp</span> <span class="pre">(empno,</span> <span class="pre">ename,</span> <span class="pre">sal,</span> <span class="pre">mgr,</span> <span class="pre">deptno)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Dept</span> <span class="pre">(deptno,</span> <span class="pre">dname,</span> <span class="pre">loc)</span></code></p></li>
+</ul>
+</div></blockquote>
+<p>La table <code class="docutils literal notranslate"><span class="pre">Emp</span></code> stocke des employés, la table <code class="docutils literal notranslate"><span class="pre">Dept</span></code>
+stocke les départements d’une entreprise. La requête suivante
+affiche le nom des employés dont le salaire est égal
+à 10000, et celui de leur département.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span>  <span class="n">e</span><span class="p">.</span><span class="n">ename</span><span class="p">,</span> <span class="n">d</span><span class="p">.</span><span class="n">dname</span>
+<span class="k">from</span>    <span class="n">emp</span> <span class="n">e</span><span class="p">,</span> <span class="n">dept</span> <span class="n">d</span>
+<span class="k">where</span>   <span class="n">e</span><span class="p">.</span><span class="n">deptno</span> <span class="o">=</span> <span class="n">d</span><span class="p">.</span><span class="n">deptno</span>
+<span class="k">and</span>     <span class="n">e</span><span class="p">.</span><span class="n">sal</span> <span class="o">=</span> <span class="mi">10000</span>
+</pre></div>
+</div>
+<p>Voici des plans d’exécution donnés par Oracle, qui varient en
+fonction de l’existence ou non de certains
+index. Dans chaque cas expliquez ce plan.</p>
+<blockquote>
+<div><ul>
+<li><p>Index sur <code class="docutils literal notranslate"><span class="pre">Dept(deptno)</span></code> et sur <code class="docutils literal notranslate"><span class="pre">Emp(Sal)</span></code>.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 NESTED LOOPS
+        2 TABLE ACCESS BY ROWID EMP
+            3 INDEX RANGE SCAN EMP_SAL
+        4 TABLE ACCESS BY ROWID DEPT
+            5 INDEX UNIQUE SCAN DEPT_DNO
+</pre></div>
+</div>
+</li>
+<li><p>Index sur <code class="docutils literal notranslate"><span class="pre">Emp(sal)</span></code> seulement.</p></li>
+</ul>
+<blockquote>
+<div><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 NESTED LOOPS
+        2 TABLE ACCESS FULL DEPT
+        3 TABLE ACCESS BY ROWID EMP
+            4 INDEX RANGE SCAN EMP_SAL
+</pre></div>
+</div>
+</div></blockquote>
+<ul class="simple">
+<li><p>Index sur <code class="docutils literal notranslate"><span class="pre">Emp(deptno)</span></code> et sur <code class="docutils literal notranslate"><span class="pre">Emp(sal)</span></code>.</p></li>
+</ul>
+<blockquote>
+<div><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 NESTED LOOPS
+        2 TABLE ACCESS FULL DEPT
+        3 TABLE ACCESS BY ROWID EMP
+            4 and-EQUAL
+                5 INDEX RANGE SCAN EMP_DNO
+                6 INDEX RANGE SCAN EMP_SAL
+</pre></div>
+</div>
+</div></blockquote>
+<ul>
+<li><p>Voici une requête légèrement différente.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">e</span><span class="p">.</span><span class="n">ename</span>
+<span class="k">from</span> <span class="n">emp</span> <span class="n">e</span><span class="p">,</span> <span class="n">dept</span> <span class="n">d</span>
+<span class="k">where</span>  <span class="n">e</span><span class="p">.</span><span class="n">deptno</span> <span class="o">=</span> <span class="n">d</span><span class="p">.</span><span class="n">deptno</span>
+<span class="k">and</span>    <span class="n">d</span><span class="p">.</span><span class="n">loc</span> <span class="o">=</span> <span class="s1">&#39;Paris&#39;</span>
+</pre></div>
+</div>
+<p>On suppose qu’il n’y a pas d’index. Voici le plan
+donné par Oracle.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 MERGE JOIN
+        2 SORT JOIN
+            3 TABLE ACCESS FULL DEPT
+        4 SORT JOIN
+            5 TABLE ACCESS FULL EMP
+</pre></div>
+</div>
+</li>
+</ul>
+<blockquote>
+<div><p>Indiquer quel(s) index on peut créer pour obtenir de meilleures
+performances (donner le plan d’exécution correspondant).</p>
+</div></blockquote>
+</div></blockquote>
+<ul>
+<li><p>Que pensez-vous de la requête suivante par rapport à la précédente?</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">e</span><span class="p">.</span><span class="n">ename</span>
+<span class="k">from</span> <span class="n">emp</span> <span class="n">e</span>
+<span class="k">where</span>  <span class="n">e</span><span class="p">.</span><span class="n">deptno</span> <span class="k">in</span> <span class="p">(</span><span class="k">select</span> <span class="n">d</span><span class="p">.</span><span class="n">deptno</span>
+            <span class="k">from</span> <span class="n">Dept</span> <span class="n">d</span>
+            <span class="k">where</span> <span class="n">d</span><span class="p">.</span><span class="n">loc</span> <span class="o">=</span> <span class="s1">&#39;Paris&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Voici le plan d’exécution donné par Oracle,:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 MERGE JOIN
+        2 SORT JOIN
+            3 TABLE ACCESS FULL EMP
+        4 SORT JOIN
+            5 VIEW
+                6 SORT UNIQUE
+                    7 TABLE ACCESS FULL DEPT
+</pre></div>
+</div>
+<p>Qu’en dites vous?</p>
+</li>
+<li><p>Sur le même schéma, voici maintenant la requête suivante.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">Emp</span> <span class="n">e1</span> <span class="k">where</span> <span class="n">sal</span> <span class="k">in</span> <span class="p">(</span><span class="k">select</span> <span class="n">salL</span>
+                <span class="k">from</span> <span class="n">Emp</span> <span class="n">e2</span>
+                <span class="k">where</span> <span class="n">e2</span><span class="p">.</span><span class="n">empno</span><span class="o">=</span><span class="n">e1</span><span class="p">.</span><span class="n">mgr</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Cette requête cherche les employés dont le salaire est égal
+à celui de leur patron. On donne le plan d’exécution avec
+Oracle (outil EXPLAin) pour cette requête dans deux cas: (i) pas
+d’index, (ii) un index sur le salaire et un index sur le numéro
+d’employé.</p>
+<p>Expliquez dans les deux cas ce plan d’exécution
+(éventuellement en vous aidant d’une représentation arborescente de
+ce plan d’exécution).</p>
+<blockquote>
+<div><ul>
+<li><p>Pas d’index.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 FILTER
+  1 TABLE ACCESS FULL EMP
+  2 TABLE ACCESS FULL EMP
+</pre></div>
+</div>
+</li>
+<li><p>Index sur <code class="docutils literal notranslate"><span class="pre">empno</span></code> et index sur <code class="docutils literal notranslate"><span class="pre">sal</span></code>.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 FILTER
+    1 TABLE ACCESS FULL EMP
+        2 and-EQUAL
+            3 INDEX RANGE SCAN I-EMPNO
+            4 INDEX RANGE SCAN I-SAL
+</pre></div>
+</div>
+</li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+<blockquote>
+<div><ul>
+<li><p>Dans le cas où il y a les deux index (salaire et numéro
+d’employé), on a le plan d’exécution suivant:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 FILTER
+    1 TABLE ACCESS FULL EMP
+    2 TABLE ACCESS ROWID EMP
+        3 INDEX RANGE SCAN I-EMPNO
+</pre></div>
+</div>
+<p>Expliquez-le.</p>
+</li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-optim2-encore-des-plans-d-execution-oracle admonition" id="ex-optim2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-optim2">ex-optim2</a>: encore des plans d’exécution Oracle</p>
+<blockquote>
+<div><p>Soit le schéma d’une base, et une requête</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">TGV</span> <span class="p">(</span>
+    <span class="n">NumTGV</span> <span class="nb">integer</span><span class="p">,</span>
+    <span class="n">NomTGV</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
+    <span class="n">GareTerm</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">32</span><span class="p">));</span>
+
+<span class="k">create</span> <span class="k">table</span> <span class="n">Arret</span> <span class="p">(</span>
+    <span class="n">NumTGV</span> <span class="nb">integer</span><span class="p">,</span>
+    <span class="n">NumArr</span> <span class="nb">integer</span><span class="p">,</span>
+    <span class="n">GareArr</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
+    <span class="n">HeureArr</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">32</span><span class="p">));</span>
+
+<span class="k">select</span> <span class="n">NomTGV</span>
+<span class="k">from</span> <span class="n">TGV</span><span class="p">,</span> <span class="n">Arret</span>
+<span class="k">where</span> <span class="n">TGV</span><span class="p">.</span><span class="n">NumTGV</span> <span class="o">=</span> <span class="n">Arret</span><span class="p">.</span><span class="n">NumTGV</span>
+<span class="k">and</span> <span class="n">GareTerm</span> <span class="o">=</span> <span class="s1">&#39;Aix&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Voici le plan d’exécution obtenu:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1 MERGE JOIN
+        2 SORT JOIN
+            3 TABLE ACCESS FULL ARRET
+        4 SORT JOIN
+            5 TABLE ACCESS FULL TGV
+</pre></div>
+</div>
+<ul>
+<li><p>Que calcule la requête?</p></li>
+<li><p>Que pouvez-vous dire sur l’existence d’index pour les
+tables  <code class="docutils literal notranslate"><span class="pre">TGV</span></code> et <code class="docutils literal notranslate"><span class="pre">Arret</span></code>? Décrivez en détail le plan d’exécution: quel algorithme
+de jointure a été choisi, quelles opérations sont effectuées et
+dans quel ordre?</p></li>
+<li><p>On fait la création d’index suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">INDEX</span>  <span class="k">index</span> <span class="n">arret_numtgv</span> <span class="k">ON</span> <span class="n">Arret</span><span class="p">(</span><span class="n">numtgv</span><span class="p">);</span>
+</pre></div>
+</div>
+</li>
+<li><p>L’index créé est-il dense? unique? Quel est le plan d’exécution choisi
+par Oracle? Vous pouvez donner le plan avec la syntaxe ou sous forme
+arborescente. Expliquez en détail le plan choisi.</p></li>
+<li><p>On ajoute encore un index:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">INDEX</span> <span class="n">tgv_gareterm</span> <span class="k">on</span> <span class="n">tgv</span><span class="p">(</span><span class="n">gareterm</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Quel est le plan d’exécution choisi par Oracle?  Expliquez le en détail.</p>
+</li>
+</ul>
+</div></blockquote>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">7. Evaluation et optimisation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-introduction-a-l-optimisation-et-a-l-evaluation">S1: Introduction à l’optimisation et à l’évaluation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-traitement-de-la-requete">S2: traitement de la requête</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#decomposition-en-bloc">Décomposition en bloc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#traduction-et-reecriture">Traduction et réécriture</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-optimisation-de-la-requete">S3: optimisation de la requête</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#la-reecriture">La réécriture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#plans-d-execution">Plans d’exécution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arbres-en-profondeur-a-gauche">Arbres en profondeur à gauche</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s4-illustration-avec-oracle">S4: illustration avec Oracle</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#parametres-et-statistiques">Paramètres et statistiques</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#plans-d-execution-oracle">Plans d’exécution Oracle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="opalgo.html" title="6. Opérateurs et algorithmes"
+             >précédent</a> |
+          <a href="tp-optim.html" title="8. Travaux pratiques: optimisation"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;7. &lt;/span&gt;Evaluation et optimisation</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

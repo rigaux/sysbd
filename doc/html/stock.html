@@ -1,0 +1,2203 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>2. Dispositifs de stockage &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="3. Structures d’index: l’arbre B" href="arbreb.html" />
+    <link rel="prev" title="1. Introduction" href="intro.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;2. &lt;/span&gt;Dispositifs de stockage</a></div>
+        <div class="rel">
+          <a href="intro.html" title="1. Introduction"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="arbreb.html" title="3. Structures d’index: l’arbre B"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="dispositifs-de-stockage">
+<span id="chap-stock"></span><h1><span class="section-number">2. </span>Dispositifs de stockage<a class="headerlink" href="#dispositifs-de-stockage" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Une base de données est constituée, matériellement, d’un ou plusieurs
+<em>fichiers</em>  stockés sur un support non volatile. Le support le
+plus couramment employé est le disque magnétique (« disque dur »)
+qui présente un bon compromis en termes de capacité de stockage, de
+prix et de performance. Un concurrent sérieux est le <em>Solid State Drive</em>,
+dont les performances sont nettement supérieures, et  le coût
+en baisse constante, ce qui le rend de plus en plus concurrentiel.</p>
+<p>Il y a deux raisons principales à
+l’utilisation de fichiers. Tout d’abord il est possible d’avoir affaire
+à des bases de données dont la taille dépasse de loin celle de la
+mémoire principale. Ensuite – et c’est la justification principale du
+recours aux fichiers, même pour des bases de petite taille – une base
+de données doit survivre à l’arrêt de l’ordinateur qui l’héberge, que
+cet arrêt soit normal ou dû à un incident matériel.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Une donnée qui n’est pas sur un support persistant est
+potentiellement perdue en cas de panne.</p>
+</div>
+<p>L’accès à des données stockées sur un support <em>persistant</em>, par contraste avec
+les applications qui manipulent des données en mémoire centrale, est
+une des caractéristiques essentielles d’un SGBD. Elle implique
+notamment des problèmes potentiels de performance puisque le temps de
+lecture d’une information sur un disque est considérablement plus
+élevé que celui d’un accès en mémoire principale. L’organisation des données
+sur un disque, les structures d’indexation et les
+algorithmes de recherche utilisés constituent donc des aspects
+essentiels des SGBD du point de vue des performances.</p>
+<p>Une  bonne partie du présent cours est, de fait, consacrée à des méthodes, techniques
+et structures de données dont le but principal est de limiter le nombre
+et la taille de données lues sur le support persistant.</p>
+<p>Un bon système se doit d’utiliser au mieux les
+techniques disponibles afin de minimiser les temps d’accès.
+Dans ce chapitre nous décrivons les techniques de stockage de
+données et le transfert de ces dernières entre les différents niveaux de mémoire
+d’un ordinateur.</p>
+<p>La première session est consacrée
+aux dispositifs de  stockage.
+Nous détaillons successivement les différents types de mémoire
+utilisées, en insistant particulièrement sur le fonctionnement
+des disques magnétiques. Nous abordons en seconde session
+les principales techniques de gestion
+de la mémoire utilisées par un SGBD. La troisième session présente les principes d’organisation
+des fichiers de base de données.</p>
+<section id="s1-supports-de-stockage">
+<h2>S1: Supports de stockage<a class="headerlink" href="#s1-supports-de-stockage" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slstock.pdf">Diapositives: supports de stockage</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc99e054tod6ogr/">Vidéo sur les dispositifs de stockage</a></p></li>
+</ul>
+</div>
+<p>Un système informatique offre plusieurs mécanismes de stockage
+de l’information, ou <em>mémoires</em>.  Ces mémoires se différencient
+par leur prix, leur rapidité, le mode d’accès aux données
+(séquentiel ou par adresse) et enfin leur durabilité.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Les mémoires <em>volatiles</em> perdent leur contenu quand
+le système est interrompu, soit par un arrêt volontaire, soit
+à cause d’une panne.</p></li>
+<li><p>Les mémoires  <em>persistantes</em> comme les disques magnétiques, les SSD, les CD ou les bandes magnétiques, préservent leur
+contenu même en l’absence d’alimentation électrique.</p></li>
+</ul>
+</div></blockquote>
+<section id="memoires">
+<h3>Mémoires<a class="headerlink" href="#memoires" title="Lien permanent vers ce titre">¶</a></h3>
+<p>D’une manière générale, plus une mémoire est rapide, plus elle est
+chère et – conséquence directe – plus
+sa capacité est réduite.
+Les différentes mémoires utilisées par un ordinateur constituent
+donc une hiérarchie (<a class="reference internal" href="#hiermem"><span class="std std-numref">Fig. 2.1</span></a>),
+allant de la mémoire la plus petite
+mais la plus efficace à la mémoire la plus volumineuse
+mais la plus lente.</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>la <em>mémoire cache</em> est une mémoire intermédiaire
+permettant au processeur d’accéder
+très rapidement aux données à traiter ;</p></li>
+<li><p>la <em>mémoire vive</em>, ou <em>mémoire principale</em>
+stocke les données et les processus constituant l’espace
+de travail de la machine; toute  information (donnée ou  programme)
+doit  être  en mémoire principale pour pouvoir être traitée par un processeur ;</p></li>
+<li><p>les <em>disques magnétiques</em> constituent le principal
+périphérique de  mémoire persistante; ils offrent une grande
+capacité de stockage tout en gardant des accès en lecture et en écriture
+relativement efficaces;</p></li>
+<li><p>les <em>Solid State Drive</em> ou SSD sont une alternative récente aux disques
+magnétiques; leurs peformances sont supérieures, mais
+leur coût élevé;</p></li>
+<li><p>enfin les CD ou les bandes magnétiques sont des supports
+très économiques mais leur lenteur les destine plutôt
+aux sauvegardes à long terme.</p></li>
+</ol>
+</div></blockquote>
+<figure class="align-center" id="id4">
+<span id="hiermem"></span><a class="reference internal image-reference" href="_images/hiermem.png"><img alt="_images/hiermem.png" src="_images/hiermem.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.1 </span><span class="caption-text">Hiérarchie des mémoires</span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La mémoire vive (que nous appellerons mémoire
+principale) et les disques (ou mémoire secondaire) sont les principaux niveaux
+à considérer pour des applications de bases de données. Une base
+de données doit être stockée sur disque, pour les raisons
+de taille et de persistance déjà évoquées, mais  les données
+doivent impérativement être transférées en mémoire vive pour
+être traitées. Dans l’hypothèse (réaliste)
+où seule une fraction de la base peut résider  en mémoire centrale,
+un SGBD doit donc en permanence effectuer
+des transferts entre mémoire principale et mémoire secondaire
+pour satisfaire les requêtes des utilisateurs.
+Le coût de ces transferts intervient de manière prépondérante
+dans les performances du système.</p>
+<div class="admonition-vocabulaire-mais-qu-est-ce-qu-une-donnee admonition">
+<p class="admonition-title">Vocabulaire: Mais qu’est-ce qu’une « donnée »?</p>
+<p>Le terme de <em>donnée</em> désigne le codage d’une unité d’information.
+Dans le contexte de ce cours, « donnée » sera toujours synonyme de nuplet
+(ligne dans une table).</p>
+<p>On parlera  <em>d’enregistrement</em> pour désigner le codage
+binaire d’un nuplet, dans une  perspective de stockage.</p>
+</div>
+<p>La technologie évoluant rapidement, il est délicat de donner
+des valeurs précises pour la taille des différentes mémoires.
+Un ordinateur est typiquement équipé de quelques Gigaoctets de mémoire vive (typiquement
+4 à 16 Go pour un ordinateur personnel, plusieurs dizaines de Go pour
+un serveur de données, plusieurs centaines pour de très gros serveurs). La taille d’un disque magnétique
+est de l’ordre du Téraoctet, soit un
+rapport de 1 à 1 000 avec les données en mémoire centrale.  Les SSD
+ont des tailles comparables à celles des disques magnétiques (pour un
+coût supérieur).</p>
+</section>
+<section id="performances-des-memoires">
+<h3>Performances des mémoires<a class="headerlink" href="#performances-des-memoires" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Comment mesurer les performances d’une mémoire? Nous retiendrons
+deux critères essentiels:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Temps d’accès</em>: connaissant  <em>l’adresse</em> d’un enregistrement, quel est le temps
+nécessaire pour aller à l’emplacement mémoire indiqué par cette adresse
+et obtenir l’information ? On parle de lecture par clé
+ou encore <em>d’accès direct</em> pour cette opération;</p></li>
+<li><p><em>Débit</em>: quel est le volume de données lues par unité de temps
+dans le meilleur des cas?</p></li>
+</ul>
+</div></blockquote>
+<p>Le premier critère est important quand on effectue des accès dits  <em>aléatoires</em>.
+Ce terme indique que deux accès successifs s’effectuent à  des adresses
+indépendantes l’une de l’autre, qui peuvent
+donc être très éloignées. Le second critère est important pour les
+accès dits <em>séquentiels</em> dans lesquels on lit une collection d’information,
+dans un ordre donné. Ces deux notions sont essentielles.</p>
+<div class="admonition-notion-acces-direct-acces-sequentiel admonition" id="notion-seqdirect">
+<p class="admonition-title">Notion: accès direct/accès séquentiel</p>
+<dl class="simple">
+<dt>Retenez les notions suivantes:</dt><dd><ul class="simple">
+<li><p><em>Accès direct</em>: étant donné une adresse dans la mémoire (et principalement sur un disque), on accède à la donnée
+stockée à cette adresse.</p></li>
+<li><p><em>Accès séquentiel</em>: on parcours la mémoire (et principalement un disque) dans un
+certain ordre en lisant
+les enregistrements au fur et à mesure.</p></li>
+</ul>
+</dd>
+</dl>
+</div>
+<p>Les performances des deux types d’accès sont extrêmement variables selon
+le type de support mémoire.
+Le temps d’un accès <em>direct</em>  en mémoire vive est par exemple de l’ordre
+de 10 nanosecondes (<span class="math notranslate nohighlight">\(10^{-8}\)</span> sec.), de 0,1 millisecondes pour un SSD, et
+de l’ordre de 10 millisecondes (<span class="math notranslate nohighlight">\(10^{-2}\)</span> sec.) pour un disque.
+Cela  représente un ratio approximatif de 1 000 000 (1 million!)
+entre les performances respectives de la mémoire centrale et du disque magnétique !
+Il est clair dans ces conditions
+que le système doit tout faire pour limiter les accès au disque.</p>
+<p>Le tableau suivant résumé les ordres de grandeur des temps d’acès pour les différentes
+mémoires.</p>
+<blockquote>
+<div><table class="colwidths-given docutils align-default" id="id5">
+<caption><span class="caption-number">Tableau 2.1 </span><span class="caption-text">Performance des divers types de mémoire</span><a class="headerlink" href="#id5" title="Lien permanent vers ce tableau">¶</a></caption>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 13%" />
+<col style="width: 27%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Type mémoire</p></th>
+<th class="head"><p>Taille</p></th>
+<th class="head"><p>Temps d’accès aléatoire</p></th>
+<th class="head"><p>Temps d’accès séquentiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Mémoire <em>cache</em> (Static RAM)</p></td>
+<td><p>Quelques Mo</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx  10^{-8}\)</span> (10 nanosec.)</p></td>
+<td><p>Plusieurs dizaines de Gos par seconde</p></td>
+</tr>
+<tr class="row-odd"><td><p>Mémoire principale (Dynamic RAM)</p></td>
+<td><p>Quelques Go</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx  10^{-8} -  10^{-7}\)</span> (10-100 nanosec.)</p></td>
+<td><p>Quelques Go par seconde</p></td>
+</tr>
+<tr class="row-even"><td><p>Disque magnétique</p></td>
+<td><p>Quelques Tos</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx  10^{-2}\)</span> (10 millisec.)</p></td>
+<td><p>Env. 100 Mo par seconde.</p></td>
+</tr>
+<tr class="row-odd"><td><p>SSD</p></td>
+<td><p>Quelques Tos</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx  10^{-4}\)</span> (0,1 millisec.)</p></td>
+<td><p>Jusqu’à quelques Gos par seconde.</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</section>
+<section id="disques">
+<h3>Disques<a class="headerlink" href="#disques" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Les disques magnétiques sont les composants les plus lents, et pourtant ils sont
+indispensables pour la gestion d’une base de données. Il est donc très
+utile de comprendre comment ils fonctionnent.</p>
+<section id="dispositif">
+<h4>Dispositif<a class="headerlink" href="#dispositif" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Un disque magnétique est une surface circulaire magnétisée capable d’enregistrer
+des informations numériques. La surface magnétisée peut être
+située d’un seul côté (« simple face ») ou des deux côtés
+(« double face ») du disque.</p>
+<p>Les disques sont divisés en <em>secteurs</em>, un secteur constituant
+la plus petite surface d’adressage. En d’autres termes, on sait lire
+ou écrire des zones débutant sur un secteur et couvrant
+un nombre entier de secteurs (1 au minimum: le secteur est l’unité
+de lecture sur le disque). La taille d’un secteur est
+le plus souvent de 512 octets.</p>
+<p>La plus petite information stockée
+sur un disque est un bit qui peut valoir 0 ou 1. Les bits
+sont groupés par 8 pour former des octets, les octets groupés par 64 pour
+former des secteurs, et une suite de secteurs
+forme un cercle ou <em>piste</em> sur la surface du disque.</p>
+<p>Un disque est entraîné dans un mouvement de rotation régulier
+par un axe. Une <em>tête de lecture</em> (deux si le disque est
+double-face) vient se positionner sur une des pistes du
+disque et y lit ou écrit les enregistrements. Le nombre minimal
+d’octets lus par une tête de lecture est physiquement
+défini par la taille d’un secteur (en général 512 octets).
+Cela étant le système d’exploitation peut choisir, au moment
+de <em>l’initialisation</em> du disque, de fixer
+une unité d’entrée/sortie supérieure
+à la taille d’un secteur, et multiple de cette dernière.
+On obtient des <em>blocs</em>, dont la taille
+est typiquement 512 octets (un secteur), 1 024 octets (deux secteurs)
+4 096 octets (huit secteurs) ou 8 192 octets (seize secteurs).</p>
+<p>Chaque piste est donc divisée
+en  <em>blocs</em> (ou <em>pages</em>) qui constituent
+l’unité d’échange entre le disque et la mémoire principale.</p>
+<figure class="align-center" id="id6">
+<span id="id1"></span><a class="reference internal image-reference" href="_images/disques.png"><img alt="_images/disques.png" src="_images/disques.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.2 </span><span class="caption-text">Fonctionnement d’un disque magnétique.</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Toute lecture ou toute écriture sur les disques s’effectue
+par blocs. Même si la lecture ne concerne qu’une donnée
+occupant 4 octets, tout le bloc contenant ces 4 octets sera transmis
+en mémoire centrale. Cette caractéristique est fondamentale
+pour l’organisation des données sur le disque. Un des objectifs
+du SGBD est de faire en sorte que, quand il est nécessaire de lire
+un bloc de 4 096 octets pour accéder à un entier de 4 octets,
+les 4 092 octets constituant le reste du bloc ont de grandes
+chances d’être utiles à court terme et se trouveront
+donc déjà chargée en mémoire centrale quand le système
+en aura besoin. C’est un premier exemple du <em>principe de localité</em>
+que nous discutons plus loin.</p>
+<div class="admonition-definition-bloc admonition">
+<p class="admonition-title">Définition: bloc</p>
+<p>Un <em>bloc</em> est une zone mémoire contigue de taille fixe
+stockée sur disque, lue ou écrite solidairement. <em>Le bloc
+est l’unité d’entrée/sortie</em> entre la mémoire secondaire et la mémoire
+principale.</p>
+</div>
+<p>La tête de lecture n’est pas entraînée dans le mouvement
+de rotation. Elle se déplace dans un plan fixe qui lui permet
+de se rapprocher ou de s’éloigner de l’axe de rotation des disques,
+et d’accéder à l’une des pistes. Pour limiter le coût
+de l’ensemble de ce dispositif et augmenter la capacité
+de stockage, les disques sont empilés
+et partagent le même axe de rotation (voir <a class="reference internal" href="#id1"><span class="std std-numref">Fig. 2.2</span></a>).
+Il y a autant de têtes de lectures que de disques (deux fois
+plus si les disques sont à double face) et toutes les
+têtes sont positionnées solidairement dans leur
+plan de déplacement. À tout moment, les pistes accessibles
+par  les têtes sont donc les mêmes pour tous
+les disques de la pile,
+ce qui constitue une contrainte dont il faut savoir
+tenir compte quand on cherche à optimiser le placement
+des données.</p>
+<p>L’ensemble des pistes accessibles à un moment donné constitue
+le <em>cylindre</em>. La notion
+de  cylindre correspond donc à  toutes les données disponibles
+sans avoir besoin de déplacer les têtes de lecture.</p>
+<p>Enfin le dernier élément du dispositif est le <em>contrôleur</em>
+qui sert d’interface avec le système d’exploitation. Le contrôleur
+reçoit du système des demandes de lecture ou d’écriture,
+et les transforme en mouvements appropriés des têtes de lectures,
+comme expliqué ci-dessous.</p>
+</section>
+<section id="entrees-sorties-sur-un-disque">
+<h4>Entrées/sorties sur un disque<a class="headerlink" href="#entrees-sorties-sur-un-disque" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Un disque est une mémoire à accès dit <em>semi-direct</em>. Contrairement
+à une bande magnétique par exemple, il est possible
+d’accéder à une information située n’importe où sur le disque
+sans avoir à parcourir séquentiellement tout
+le support. Mais, contrairement à la mémoire
+principale, avant d’accéder à une adresse, il faut
+attendre un temps variable lié au mécanisme de rotation du disque.</p>
+<p>L’accès est fondé sur une adresse
+donnée à chaque bloc au moment de l’initialisation
+du disque par le système d’exploitation. Cette adresse
+est  composée des trois éléments suivants :</p>
+<ol class="arabic simple">
+<li><p>le numéro du disque dans la pile ou le numéro
+de la surface si les disques sont à double-face ;</p></li>
+<li><p>le numéro de la piste ;</p></li>
+<li><p>le numéro du bloc sur la piste.</p></li>
+</ol>
+<p>La lecture d’un bloc, étant donnée son adresse, se décompose
+en trois étapes :</p>
+<ol class="arabic simple">
+<li><p><em>positionnement de la tête de lecture</em> sur la
+piste contenant le bloc ;</p></li>
+<li><p><em>rotation du disque</em> pour attendre que le bloc
+passe sous la tête de lecture (rappelons que les têtes
+sont fixes, c’est le disque qui tourne) ;</p></li>
+<li><p><em>transfert du bloc</em>.</p></li>
+</ol>
+<p>La durée d’une opération de lecture est donc la somme
+des temps consacrés à chacune des trois opérations,
+ces temps étant désignés respectivement par les termes
+<em>délai de positionnement</em>,  <em>délai
+de latence</em> et <em>temps de transfert</em>. Le temps
+de transfert est négligeable pour un bloc,
+mais peu devenir important quand des milliers
+de blocs doivent être lus. Le mécanisme
+d’écriture est à peu près semblable à la lecture, mais
+peu prendre un peu plus de temps si le contrôleur
+vérifie que l’écriture s’est faite correctement.</p>
+<p>La latence de lecture fait du disque une mémoire à accès semi-direct,
+comme mentionné précédemment. C’est aussi cette latence qui rend le
+disque lent comparé aux autres mémoires, <em>surtout si un déplacement
+des têtes de lecture est nécessaire</em>. Une conséquence très importante
+est qu’il est de très loin préférable de lire sur un disque en accès séquentiel
+que par une séquence d’accès aléatoires (cf. exercices).</p>
+</section>
+<section id="specifications-d-un-disque">
+<h4>Spécifications d’un disque<a class="headerlink" href="#specifications-d-un-disque" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Le  <a class="reference internal" href="#perfdisque"><span class="std std-numref">Tableau 2.2</span></a> donne les spécifications d’un disque, telles qu’on peut les trouver
+sur le site de n’importe quel constructeur. Les chiffres donnent un ordre de grandeur pour
+les performances d’un disque, étant bien entendu
+que les disques destinés aux serveurs sont beaucoup
+plus performants que ceux destinés aux ordinateurs
+personnels. Le modèle donné en exemple  appartient
+au mileu de gamme.</p>
+<p>Le disque comprend 5 335 031 400 secteurs de 512
+octets chacun, la multiplication
+des deux chiffres donnant bien la capacité totale de 2,7 To.
+Les secteurs étant répartis sur 3 disques double-face,
+il y a donc 5 335 031 400 / 6 = 889 171 900 secteurs par surface.</p>
+<p>Le nombre de secteurs par piste n’est pas constant, car les
+pistes situées près de l’axe sont bien entendu beaucoup
+plus petites que celles situées près du bord du disque. On ne
+peut, à partir des spécifications, que calculer le nombre
+moyen de secteurs par piste, qui est égal à <span class="math notranslate nohighlight">\(889 171 900/15 300=58 115\)</span>.
+On peut donc estimer qu’une piste stocke en moyenne
+<span class="math notranslate nohighlight">\(58 115 \times 512 = 29\)</span> Mégaoctets. Ce chiffre donne le nombre
+d’octets qui peuvent être lus <em>en séquentiel</em>, sans délai de latence ni délai
+de positionnement.</p>
+<blockquote>
+<div><span id="perfdisque"></span><table class="colwidths-given docutils align-default" id="id7">
+<caption><span class="caption-number">Tableau 2.2 </span><span class="caption-text">Spécification d’un disque</span><a class="headerlink" href="#id7" title="Lien permanent vers ce tableau">¶</a></caption>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 67%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Caractéristique</p></th>
+<th class="head"><p>Performance</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Capacité</p></td>
+<td><p>2,7 To</p></td>
+</tr>
+<tr class="row-odd"><td><p>Taux  de transfert</p></td>
+<td><p>100 Mo/s</p></td>
+</tr>
+<tr class="row-even"><td><p>Cache</p></td>
+<td><p>3 Mo</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nbre de disques</p></td>
+<td><p>3</p></td>
+</tr>
+<tr class="row-even"><td><p>Nbre de têtes</p></td>
+<td><p>6</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nombre de cylindres</p></td>
+<td><p>15 300</p></td>
+</tr>
+<tr class="row-even"><td><p>Vitesse de rotation</p></td>
+<td><p>10 000 rpm (rotations par minute)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Délai de latence</p></td>
+<td><p>En moyenne 3 ms</p></td>
+</tr>
+<tr class="row-even"><td><p>Temps de positionnement moyen</p></td>
+<td><p>5,2 ms</p></td>
+</tr>
+<tr class="row-odd"><td><p>Déplacement de piste à piste</p></td>
+<td><p>0,6 ms</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>Les temps donnés pour le temps
+de latence et le délai de rotation ne sont que des moyennes.
+Dans le meilleur des cas, les têtes sont positionnées
+sur la bonne piste, et le bloc à lire est celui
+qui arrive sous la tête de lecture. Le bloc
+peut alors être lu directement, avec un délai réduit
+au temps de transfert.</p>
+<p>Ce temps de transfert peut être considéré comme négligeable
+dans le cas d’un bloc unique, comme le montre le raisonnement
+qui suit, basé sur les performances du  <a class="reference internal" href="#perfdisque"><span class="std std-numref">Tableau 2.2</span></a>.
+Le disque effectue 10 000 rotations par minute, ce
+qui correspond à 166,66 rotations par seconde, soit une rotation
+toutes les 0,006 secondes (6 ms). C’est le temps requis pour lire
+une piste entièrement. Cela donne également le temps
+moyen de latence de 3 ms.</p>
+<p>Pour lire un bloc sur une piste, il faudrait tenir
+compte du nombre exact de secteurs, qui varie en fonction
+de la position exacte. En prenant comme valeur moyenne
+303 secteurs par piste, et une taille de bloc égale
+à 4 096 soit huit secteurs, on obtient le temps
+de transfert moyen pour un bloc :</p>
+<div class="math notranslate nohighlight">
+\[\frac{6ms \times 8}{303} = 0,16 ms\]</div>
+<p>Le temps de transfert ne devient significatif que quand
+on lit plusieurs blocs consécutivement. Notez quand même que les valeurs
+obtenues restent beaucoup plus élevées que les temps
+d’accès en mémoire principale qui s’évaluent en nanosecondes.</p>
+<p>Dans une situation moyenne,
+la tête n’est pas sur la bonne piste, et une fois
+la tête positionnée (temps moyen 5.2 ms), il faut attendre une rotation
+partielle pour obtenir le bloc (temps moyen 3 ms). Le temps
+de lecture est alors en moyenne  de 8.2 ms, si on ignore
+le temps de transfert.</p>
+</section>
+</section>
+<section id="les-solid-state-drives">
+<h3>Les <em>Solid State Drives</em><a class="headerlink" href="#les-solid-state-drives" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un disque <em>solid-state</em>, ou SSD, est bâti sur la mémoire dite <em>flash</em>,  celle
+utilisée pour les clés USB.  Ce matériel est constitué de
+mémoires à semi-conducteurs à l’état solide. Contrairement aux disques
+magnétiques à rotation, les emplacements mémoire sont à accès direct,
+ce qui élimine le temps de latence.</p>
+<p>Le temps d’accès direct est considérablement diminué, de l’ordre de quelques dixièmes de
+millisecondes, soit cent fois moins (encore une fois il s’agit d’un ordre de grandeur) que
+pour un disque magnétique.
+Le débit en lecture/écriture est également bien plus important, de l’ordre de 1 Go par sec,
+soit 10 fois plus efficace. La conclusion simple est que le meilleur
+moyen d’améliorer les performances d’une base de données est de la placer sur un disque SSD,
+avec des résultats spectaculaires ! Evidemment, il y a une contrepartie: le coût est plus
+élevé que pour un disque traditionnel, même si l’écart tend à diminuer. En 2015, il
+faut compter 200 à 300 Euros pour un disque SSD d’un demi Téraoctet, environ 10 fois
+moins pour un disque magnétiqe de même capacité.</p>
+<p>Un problème technique posé par les SSD est que le nombre d’écritures possibles sur un
+même secteur est limité. Les constructeurs ont semble-t-il bien géré cette caractéristique,
+le seul inconvénient visible étant la diminution progressive de la capacité du disque
+à cause des secteurs devenus inutilisables.</p>
+<p>En conclusion, les SSD ont sans doute un grand avenir pour la gestion des bases de données
+de taille faible à moyenne (disons de l’ordre du Téraoctet). Si on ne veut pas se casser
+la tête pour améliorer les performances d’un système, le passage du disque magnétique
+au SSD est une méthode sûre et rapide.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Pourquoi faut-il placer une base de données sur une mémoire persistante?</p>
+<div class="reauthoring_embedded_quiz" id="stock1-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce qu’elle est plus efficace.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Parce qu’elle peut stocker des données plus volumineuses.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce la structure d’une base de données ne peut être encodée que sur un disque magnétique.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Qu’entend-on par <em>accès direct</em></p>
+<div class="reauthoring_embedded_quiz" id="stock1-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On va lire sur le disque sans passer par la mémoire principale.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> On va lire sur le disque à un emplacement précis</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On balaye les pistes du disque dans un ordre précis.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Qu’entend-on par <em>accès aléatoire</em></p>
+<div class="reauthoring_embedded_quiz" id="stock1-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On lit au hasard sur le disque</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On lit soit sur le disque, soit dans la mémoire RAM</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> On va lire sur le disque sans tenir compte de la position initiale des têtes de lecture</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelle affirmation sur les blocs est vraie:</p>
+<div class="reauthoring_embedded_quiz" id="stock1-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est un espace de taille variable qui contient un groupe d’enregistrements</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Deux enregistrements d’un même bloc sont toujours transférés ensemble</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Un système peut choisir de lire ou d’écrire un fragment d’un bloc</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Pourquoi vaut-il mieux lire une collection d’enregistrements par
+un accès séquentiel  plutôt que par un ensemble d’accès aléatoires.</p>
+<div class="reauthoring_embedded_quiz" id="stock1-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce c’est plus simple à programmer (une adresse et une taille suffisent)</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Parce qu’on limite au minimum les déplacements des têtes de lecture</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce qu’on ne risque pas de rater des enregistrements</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelle définition du <em>délai de latence</em> est correcte</p>
+<div class="reauthoring_embedded_quiz" id="stock1-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est le temps de déplacement des têtes de lecture</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> C’est le temps d’attente que le bloc à lire soit amené par rotation sous la tête de lecture</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est le délai entre la demande de lecture d’un bloc et son obtention</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelle définition du <em>délai de positionnement</em> est correcte</p>
+<div class="reauthoring_embedded_quiz" id="stock1-7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> C’est le temps de déplacement des têtes de lecture</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est le temps d’attente que le bloc à lire soit amené par rotation sous la tête de lecture</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est le délai entre la demande de lecture d’un bloc et son obtention</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-gestion-des-memoires">
+<h2>S2: Gestion des mémoires<a class="headerlink" href="#s2-gestion-des-memoires" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slcache.pdf">Diapositives: gestion des mémoires</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc990cb5lxx5c88/">Vidéo sur la gestion des mémoires</a></p></li>
+</ul>
+</div>
+<p>Un SGBD doit gérer  essentiellement deux mémoires:
+la mémoire principale, et la mémoire secondaire (le disque).
+Toutes les enregistrements <em>doivent</em> être en mémoire secondaire,
+pour des raisons de <em>persistance</em>. Une partie de ces enregistrements
+est en mémoire principale, pour des raisons de <em>performance</em>.</p>
+<p>La  <a class="reference internal" href="#buffer-disque"><span class="std std-numref">Fig. 2.3</span></a> illustre ces deux composants essentiels. Tout serveur
+de base de données s’exécute sur une machine qui lui alloue une partie de sa mémoire
+RAM, que nous appelerons <em>mémoire tampon</em> ou <em>cache</em> pour faire simple, ainsi qu’une
+partie du disque magnétique. Ces deux ressources sont gérées par un
+module du SGBD, le gestionnaire des accès (GA dans ce qui suit).</p>
+<figure class="align-center" id="id8">
+<span id="buffer-disque"></span><a class="reference internal image-reference" href="_images/buffer-disque.png"><img alt="_images/buffer-disque.png" src="_images/buffer-disque.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.3 </span><span class="caption-text">Le <em>cache</em> et le disque, ressources mémoires allouées au SGBD</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Les enregistrements sont disponibles dans des <em>blocs</em> qui constituent l’unité de
+lecture et d’écriture sur le disque.  Le GA exécute des requêtes de lecture ou d’écriture,
+et nous allons considérer comme acquis
+que ces requêtes  comprennent <em>toujours</em> l’adresse du bloc. Cette section
+explique comment ces requêtes sont exécutées.</p>
+<section id="les-lectures">
+<h3>Les lectures<a class="headerlink" href="#les-lectures" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Comme le montre la  <a class="reference internal" href="#buffer-disque"><span class="std std-numref">Fig. 2.3</span></a>, le <em>cache</em>
+est constitué de blocs en mémoire principale qui sont des <em>copies</em>
+de blocs sur le disque. Quand une lecture est requise,
+deux cas sont possibles:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>l’enregistrement fait partie d’un bloc qui est déjà dans le <em>cache</em>, le GA prend le bloc,
+accède à l’enregistrement et le retourne;</p></li>
+<li><p>sinon il faut d’abord aller lire un bloc sur le disque, et le placer dans le <em>cache</em>
+pour se ramener au cas précédent.</p></li>
+</ul>
+</div></blockquote>
+<p>La demande d’accès est appelée <em>lecture logique</em>: elle ignore si l’enregistrement est présent
+en mémoire ou non. Le GA détermine si une
+<em>lecture physique</em> sur le disque est nécessaire. La lecture physique implique le chargement
+d’un bloc du disque vers le <em>cache</em>, et donc un temps d’attente considérablement supérieur.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Comment faire pour savoir si un bloc est ou non en <em>cache</em>? Grâce
+à une table de hachage (illustrée sur la  <a class="reference internal" href="#buffer-disque"><span class="std std-numref">Fig. 2.3</span></a>) qui pointe
+sur les blocs chargés en mémoire. L’accès à un bloc du cache, étant donnée son adresse, est
+extrêmement rapide avec une telle structure.</p>
+</div>
+<p>Un SGBD performant cherche à maintenir en mémoire principale
+une copie aussi large que possible de la base de données, <em>et surtout la partie la
+plus utilisée</em>.  Une bonne organisation va minimiser le nombre de lectures
+physiques par rapport au nombre de lectures logiques. On mesure
+cette efficacité avec un paramètre nommé  le <em>hit ratio</em>, défini comme suit :</p>
+<div class="math notranslate nohighlight">
+\[\text{hit ratio} = \frac{\text{nbLecturesLogiques} - \text{nbLecturesPhysiques}}{\text{nbLecturesLogiques}}\]</div>
+<p>Si toutes les lectures logiques (demande de bloc) aboutissent
+à une lecture physique (accès au disque), le <em>hit
+ratio</em> est 0 ; s’il n’y a <em>aucune</em> lecture physique (tous les enregistrements
+demandés sont déjà en mémoire), le <em>hit ratio</em> est de 1.</p>
+<p>Il est très important de comprendre  que le <em>hit ratio</em> n’est
+pas simplement le rapport entre la taille de la
+mémoire cache et celle de la base. Ce serait vrai si tous
+les blocs étaient lus avec une probabilité uniforme, mais en pratique certains
+blocs sont demandés beaucoup plus souvent que d’autres, et les écarts sont de plus
+variables dans le temps.
+Le <em>hit ratio</em> représente justement la capacité
+du système à stocker dans le cache les pages les plus lues pendant une période donnée.</p>
+<p>Plus la mémoire cache est importante, et plus il sera possible d’y conserver
+une partie significative de la base, avec un <em>hit ratio</em> élevé et des
+gains importants en terme de performance. Cela étant le <em>hit ratio</em> ne
+croît toujours pas linéairement avec l’augmentation de la taille de la mémoire
+cache.  Si la disproportion entre la taille du cache et celle de la base est
+élevée, le <em>hit ratio</em> est conditionné par le pourcentage des accès à la
+base qui lisent les blocs avec une probabilité
+uniforme. Prenons un exemple pour clarifier les choses.</p>
+<div class="admonition-un-exemple-pour-comprendre admonition">
+<p class="admonition-title">Un exemple pour comprendre</p>
+<p>La base de données fait 2 GigaOctets, le cache 30 MégaOctets.</p>
+<p>Supposons que dans 60 % des cas une lecture logique s’adresse à une partie limitée de la base,
+correspondant aux principales tables de l’application, dont la taille est, disons, 200 Mo.
+Dans 40 %  des autres cas  les accès se font avec une probabilité uniforme
+dans les 1,8 Go restant.</p>
+<p>En augmentant la taille du cache jusqu’à 333 Mo, on va améliorer
+régulièrement le <em>hit ratio</em> jusqu’à un peu plus de 0,6.
+En effet les 200 Mo correspondant
+à 60 % des lectures vont finir par se trouver placées en cache
+(<span class="math notranslate nohighlight">\(200\ Mo\ =\ 333 \times 0,6\)</span>),
+et n’en bougeront pratiquement plus. En revanche, les 40 %
+des autres accès accèderont à 1,8 Go avec seulement 133 Mo et
+le  <em>hit ratio</em> restera très faible pour cette partie-là.</p>
+<p>En augmentant la mémoire cache au-delà de 333 Mo, on améliorera peu le <em>hit ratio</em>
+puisque les  40 % de lectures uniformes garderont peu de chances de trouver
+le bloc demandé en <em>cach</em>.</p>
+</div>
+<p>Conclusion : si vous cherchez la meilleure taille pour un cache
+sur une très grosse base, faites l’expérience d’augmenter
+régulièrement l’espace mémoire alloué jusqu’à ce que la courbe
+d’augmentation du <em>hit ratio</em> s’applatisse. En revanche sur une
+petite base où il est possible d’allouer un cache de taille
+comparable à la base, on a la possibilité d’obtenir
+un  <em>hit ratio</em> optimal de 1.</p>
+</section>
+<section id="les-mises-a-jour">
+<h3>Les mises à jour<a class="headerlink" href="#les-mises-a-jour" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Pour les lectures, les techniques sont finalement assez simple. Avec les écritures
+cela se complique, mais cela va nous permettre de vérifier la mise en œuvre
+d’un principe fondamental que nous retrouverons systématiquement par la suite:</p>
+<div class="admonition-principe-rappel admonition">
+<p class="admonition-title">Principe (rappel)</p>
+<p>Il faut <em>toujours</em> éviter dans la mesure du possible d’effectuer des écritures <em>aléatoires</em>
+et préférer des écritures <em>séquentielles</em>.</p>
+</div>
+<p>À ce principe correspond une technique, elle aussi fondamentale (elle se retrouve bien
+au-delà des SGBD), celle des fichiers journaux (<em>logs</em>).</p>
+<section id="une-approche-naive">
+<h4>Une approche naïve<a class="headerlink" href="#une-approche-naive" title="Lien permanent vers ce titre">¶</a></h4>
+<p>En première approche, on peut procéder comme pour une lecture</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on trouve dans le <em>cache</em> le bloc contenant l’enregistrement, ou on le charge dans le <em>cache</em> s’il n’y est pas déjà;</p></li>
+<li><p>on effectue la mise à jour sur l’enregistrement dans le <em>cache</em>;</p></li>
+</ul>
+</div></blockquote>
+<p>La situation est alors celle de la  <a class="reference internal" href="#write-naif-stock"><span class="std std-numref">Fig. 2.4</span></a>: le bloc contenant l’enregistrement
+est marqué comme étant « modifié » (en pratique, chaque bloc contient un marqueur dit <em>dirty</em>
+qui indique si une modification a été effectuée par rapport à la version du même bloc
+sur le disque). On se trouve alors face à deux mauvais choix:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>soit on garde le bloc modifié en mémoire, en attendant qu’une opportunité se présente
+pour effectuer l’écriture sur le disque; dans l’intervalle, toute panne du serveur
+entraîne la perte de la modification;</p></li>
+<li><p>soit on écrit le bloc sur le disque pour remplacer la version non modifiée, et
+on se ramène à des écritures non ordonnées, aléatoires et donc pénalisantes.</p></li>
+</ul>
+</div></blockquote>
+<figure class="align-center" id="id9">
+<span id="write-naif-stock"></span><a class="reference internal image-reference" href="_images/write-naif.png"><img alt="_images/write-naif.png" src="_images/write-naif.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.4 </span><span class="caption-text">Gestion naïve des écritures: les blocs doivent être écrits en ordre aléatoire.</span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Il faut bien réaliser qu’un bloc peut contenir des <em>centaines</em> d’enregistrements, et que déclencher
+une écriture sur disque dès que <em>l’un</em> d’entre eux est modifié va à l’encontre
+d’un principe de regroupement qui vise à limiter les entrées/sorties
+sur la mémoire persistante.</p>
+</section>
+<section id="les-fichiers-journaux-logs">
+<h4>Les fichiers journaux (<em>logs</em>)<a class="headerlink" href="#les-fichiers-journaux-logs" title="Lien permanent vers ce titre">¶</a></h4>
+<p>La bonne technique est plus complexe, mais beaucoup plus performante. Elle consiste à procéder
+comme dans le cas  naïf, <em>et</em> à écrire séquentiellement la mise à jour dans un fichier séquentiel,
+distinct de la base, mais utilisable pour effectuer une reprise en cas de panne.</p>
+<p>La méthode est illustrée par la  <a class="reference internal" href="#recovery"><span class="std std-numref">Fig. 2.5</span></a>. Le <em>cache</em> est divisé en deux parties,
+ainsi que la mémoire du disque. Idéalement, on dispose de deux disques (nous reviendrons
+sur ces aspects dans le chapitre <a class="reference internal" href="rp.html#chap-rp"><span class="std std-ref">Reprise sur panne</span></a>). Le premier cache est celui de la base,
+comme précédemment. Le second sert de tampon d’écriture dans un fichier particulier, le
+journal (ou <em>log</em>) qui enregistre toutes les opérations de mise à jour.</p>
+<p>Au moment d’une mise à jour, le bloc de la base modifié n’est pas écrit sur disque. En revanche
+la commande de mise à jour est écrite <em>séquentiellement</em> dans le fichier journal.</p>
+<figure class="align-center" id="id10">
+<span id="recovery"></span><a class="reference internal image-reference" href="_images/recovery.png"><img alt="_images/recovery.png" src="_images/recovery.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.5 </span><span class="caption-text">Gestion  des écritures avec fichier journal</span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>On évite donc les écritures aléatoires, tout en s’assurant que toute commande de mise à jour
+est écrite sur disque et pourra donc servir à une reprise en cas de panne.</p>
+<p>Que devient le bloc modifié dans le <em>cache</em> de la base? Et bien, il sera écrit sur disque
+de manière opportuniste, quand un événement rendra cette écriture nécessaire. Par exemple:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le <em>cache</em> est plein et il faut faire de la place;</p></li>
+<li><p>le serveur est arrêté;</p></li>
+<li><p>la base est inactive, et le système estime que le moment est venu de déclencher
+une synchronisation.</p></li>
+</ul>
+</div></blockquote>
+<p>Le point important, c’est qu’au moment de l’écriture effective, l’opération  sera probablement
+bien plus « rentable » qu’avec la solution naïve. En premier lieu, le bloc contiendra
+sans doute <em>n</em> enregistrements modifiés, et on aura donc remplacé <em>n</em> écritures (solution naïve)
+par une seule. En second lieu, il est possible que plusieurs blocs contigus sur le disque doivent être
+écrits, ce qui permet une écriture <em>séquentielle</em> évitant le délai de latence. Enfin, le système
+gagne ainsi une marge de manœuvre pour choisir le bon moment pour déclencher les écritures.</p>
+<p>En résumé, cette technique basée sur les fichiers journaux, outre son intérêt intrinsèque, est
+une excellente illustration des efforts consacrés par les SGBD à privilégier les
+accès groupés et séquentiels au dépend des accès aléatoires et individuels.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Les fichiers journaux sont à la base des techniques de reprise sur panne
+décrites dans le chapitre <a class="reference internal" href="rp.html#chap-rp"><span class="std std-ref">Reprise sur panne</span></a>.</p>
+</div>
+</section>
+</section>
+<section id="le-principe-de-localite">
+<h3>Le principe de localité<a class="headerlink" href="#le-principe-de-localite" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’ensemble des techniques utilisées dans la gestion du stockage relève
+d’un principe assez général, dit de <em>localité</em>. Il résulte d’une observation
+pragmatique: l’ensemble des  données utilisées
+par une application pendant une période donnée forme souvent
+un groupe bien identifié et présentant des caractéristiques
+de proximité.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Proximité spatiale</em>: Si une donnée <em>d</em> est utilisée,
+les données « proches » de <em>d</em> ont de fortes chances de l’être
+également</p></li>
+<li><p><em>Proximité temporelle</em>: quand une application accède
+à une donnée <em>d</em>, il y a de fortes chances qu’elle y accède à nouveau
+peu de temps après.</p></li>
+<li><p><em>Proximité de référence</em>: si une donnée <em>d1</em> référence
+une donnée <em>d2</em>, l’accès à <em>d1</em> entraîne souvent
+l’accès à <em>d2</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Sur la base de ce principe, un SGBD cherche à optimiser le placement
+les données  « proches » de celles en cours d’utilisation. Cette
+optimisation se résume essentiellement
+à déplacer dans la hiérarchie des mémoires des groupes
+de données proches de la donnée utilisée à un instant <em>t</em>.
+Le pari est que l’application accèdera à d’autres
+données de ce groupe. Voici quelques mises en application
+de ce principe.</p>
+<section id="localite-spatiale-regroupement">
+<h4>Localité spatiale: regroupement<a class="headerlink" href="#localite-spatiale-regroupement" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Prenons un exemple simple pour se  persuader de l’importance
+d’un bon regroupement des données sur le disque :
+le SGBD doit lire 5 chaînes de caractères
+de 1000 octets chacune. Pour une taille de bloc égale à 4096
+octets, deux blocs peuvent suffire. La  <a class="reference internal" href="#orgadisk"><span class="std std-numref">Fig. 2.6</span></a>
+montre deux organisations sur le disque. Dans la première
+chaque chaîne est placée dans un bloc différent, et les blocs
+sont répartis aléatoirement sur les pistes du disque.
+Dans la seconde organisation, les chaînes sont rassemblés
+dans deux blocs qui sont consécutifs sur une même piste
+du disque.</p>
+<figure class="align-center" id="id11">
+<span id="orgadisk"></span><a class="reference internal image-reference" href="_images/orgadisk.png"><img alt="_images/orgadisk.png" src="_images/orgadisk.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.6 </span><span class="caption-text">Mauvaise et bonne organisation sur un disque.</span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La lecture dans le premier cas implique 5 déplacements
+des têtes de lecture, et 5 délais de latence ce qui
+donne un temps de <span class="math notranslate nohighlight">\(5 \times (5.2 + 3) = 41\)</span> ms.
+Dans le second cas, on aura un déplacement, et un délai
+de latence pour la lecture du premier bloc, mais le bloc suivant
+pourra être lu instantanément, pour un temps total de 8,2 ms.</p>
+<p>Les  performances obtenues sont dans un rapport de 1 à 5,
+le temps minimal s’obtenant en combinant deux optimisations : regroupement
+et contiguïté. Le regroupement consiste à placer dans le même
+bloc des données qui ont de grandes chances d’êtres lues au même
+moment. Les critères permettant de déterminer le regroupement
+des données constituent un des fondements des structures
+de données en mémoire secondaire qui seront étudiées par la suite.
+Le placement dans des blocs contigus est une extension
+directe du principe de regroupement. Il permet
+d’effectuer des <em>lectures séquentielles</em> qui, comme
+le montre l’exemple ci-dessus, sont beaucoup
+plus performantes que les lectures aléatoires car
+elles évitent des déplacements de têtes de lecture.</p>
+<p>Plus généralement, le gain obtenu dans la lecture de deux données <span class="math notranslate nohighlight">\(d_1\)</span> et <span class="math notranslate nohighlight">\(d_2\)</span>
+est d’autant plus important
+que les données sont « proches », sur le disque,
+cette proximité étant définie comme suit, par ordre
+décroissant :</p>
+<ol class="arabic simple">
+<li><p>la proximité maximale est obtenue quand <span class="math notranslate nohighlight">\(d_1\)</span>
+et <span class="math notranslate nohighlight">\(d_2\)</span> sont dans le même bloc : elles
+seront alors toujours lues ensembles ;</p></li>
+<li><p>le niveau de proximité suivant est obtenu quand
+les données sont placées dans deux blocs
+consécutifs ;</p></li>
+<li><p>quand les données sont dans deux blocs
+situés sur la même piste du même disque,
+elles peuvent être lues par la même tête de lecture,
+sans déplacement de cette dernière, et en une
+seule rotation du disque ;</p></li>
+<li><p>l’étape suivante est le placement des deux blocs
+dans un même cylindre, qui évite le déplacement
+des têtes de lecture ;</p></li>
+<li><p>enfin si les blocs sont dans deux cylindres distincts,
+la proximité est définie par la distance
+(en nombre de pistes) à parcourir.</p></li>
+</ol>
+<p>Les SGBD essaient d’optimiser
+la proximité des données au moment de leur placement sur le disque.
+Une table par exemple devrait être stockée sur une même
+piste ou, dans le cas où elle occupe plus d’une piste,
+sur les pistes d’un même cylindre, afin de pouvoir
+effectuer efficacement un parcours séquentiel.</p>
+<p>Pour que le SGBD puisse effectuer ces optimisations, il doit se voir
+confier, à la création de la base, un espace important
+sur le disque dont il sera le seul à gérer l’organisation.
+Si le SGBD se contentait de demander au système d’exploitation
+de la place disque quand il en a besoin, le stockage
+physique obtenu risque d’être très fragmenté.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Retenez qu’un critère essentiel de performance
+pour une base de données est le stockage le plus contigu
+possible des données.</p>
+</div>
+</section>
+<section id="localite-temporelle-ordonnancement">
+<h4>Localité temporelle: ordonnancement<a class="headerlink" href="#localite-temporelle-ordonnancement" title="Lien permanent vers ce titre">¶</a></h4>
+<p>En théorie, si un fichier occupant <em>n</em> blocs est stocké
+contiguement sur une même piste, la lecture séquentielle
+de ce fichier sera – en ignorant le temps de transfert –
+approximativement <em>n</em> fois plus efficace que si tous
+les blocs sont répartis aléatoirement sur les pistes
+du disque.</p>
+<p>Cet analyse doit cependant être relativisée car
+un système est souvent en situation de satisfaire
+simultanément plusieurs utilisateurs, et doit
+gérer leurs demandes concurramment. Si un utilisateur
+<em>A</em> demande la lecture du fichier <em>F1</em> tandis
+que l’utilisateur <em>B</em> demande la lecture du fichier <em>F2</em>,
+le système alternera probablement les lectures des blocs
+des deux fichiers. Même s’ils sont tous
+les deux stockés séquentiellement, des déplacements
+de tête de lecture interviendront alors et
+minimiseront dans une certaine mesure cet avantage.</p>
+<figure class="align-center" id="id12">
+<span id="seqdisk"></span><a class="reference internal image-reference" href="_images/seqdisk.png"><img alt="_images/seqdisk.png" src="_images/seqdisk.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.7 </span><span class="caption-text">Séquencement des entrées/sorties</span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le système d’exploitation, ou le SGBD, peuvent réduire cet
+inconvénient en conservant temporairement les demandes
+d’entrées/sorties dans une zone tampon (<em>cache</em>) et en
+réorganisant (<em>séquencement</em>) l’ordre des accès. La
+<a class="reference internal" href="#seqdisk"><span class="std std-numref">Fig. 2.7</span></a> montre le fonctionnement d’un séquenceur. Un
+ensemble d’ordres de lectures est reçu,  <em>L(1-16)</em> désignant par
+exemple la demande de lecture du bloc 16 sur la piste 1. On peut
+supposer sur cet exemple que deux utilisateurs effectuent séparément
+des demandes d’entrée/sortie qui s’imbriquent quand elles sont
+transmises vers le contrôleur.</p>
+<p>Pour éviter les accès aléatoires qui résultent de cette imbrication,
+les demandes d’accès sont stockées temporairement
+dans un <em>cache</em>. Le séquenceur les trie alors par piste,
+puis par bloc au sein de chaque piste, et transmet la liste
+ordonnée au contrôleur du disque. Dans notre exemple, on se place
+donc tout d’abord sur la piste 1, et on lit séquentiellement
+les blocs 16, 17 et 18. Puis on passe à la piste 2 et on lit
+les blocs 23 et 24. Nous laissons au lecteur, à titre d’exercice,
+le soin de déterminer le gain obtenu.</p>
+<p>Une technique  pour systématiser cette stratégie
+est celle dite « de l’ascenseur ». L’idée est que
+les têtes de lecture se déplacent régulièrement du bord
+de la surface du disque vers l’axe de rotation, puis reviennent
+de l’axe vers le bord. Le déplacement s’effectue piste par piste,
+et à chaque piste le séquenceur transmet au contrôleur
+les demandes d’entrées/sorties pour la piste courante.</p>
+<p>Cet algorithme réduit au maximum de temps de déplacement
+des têtes puisque ce déplacement s’effectue systématiquement
+sur la piste adjacente. Il est particulièrement efficace pour des
+systèmes avec de très nombreux processus demandant chacun
+quelques blocs de données. En revanche il peut avoir des effets
+assez désagréables en présence de quelques processus gros
+consommateurs de données. Le processus qui demande des blocs sur
+la piste 1 alors que les têtes viennent juste de passer à la piste
+2 devra attendre un temps respectable avant de voir sa requête satisfaite.</p>
+</section>
+<section id="remplacement-des-blocs-dans-le-cache">
+<h4>Remplacement des blocs dans le cache<a class="headerlink" href="#remplacement-des-blocs-dans-le-cache" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Pour finir sur les variantes de la localité, revenons
+sur ce qui se passe quand la mémoire cache est pleine et qu’un
+nouveau bloc doit être lu sur le disque.
+Un algorithme de remplacement doit être adopté
+pour retirer un des blocs de la mémoire et le replacer sur le disque (opérations
+dite de <em>flush</em>). L’algorithme le plus courant
+est dit <em>Least Recently Used</em> (LRU). Il consiste
+à choisir comme « victime » le bloc dont
+la dernière date de lecture logique est la plus ancienne.
+Ce bloc est alors soustrait de la mémoire centrale (il
+reste bien entendu sur le disque) et le nouveau
+bloc vient le remplacer.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Si le bloc est marqué comme <em>dirty</em> (contenant
+des mises à jour) il faut l’écrire sur le disque.</p>
+</div>
+<p>La conséquence de cet algorithme est que le contenu
+du <em>cache</em> est une image fidèle de l’activité récente sur
+la base de données. Pour donner une illustration concrète de
+cet effet, supposons qu’une base soit divisée en trois parties
+distinctes <em>X</em>, <em>Y</em> et <em>Z</em>. L’application <em>A1</em> ne lit que dans
+<em>X</em>, l’application <em>A2</em> ne lit que dans <em>Y</em>, et l’application
+<em>A3</em> ne lit que dans <em>Z</em>.</p>
+<p>Si, dans la période qui vient de s’écouler, la base
+a été utilisée à 20% par <em>A1</em>, à 30% par <em>A2</em> et
+à 50% par <em>A3</em>, alors on trouvera les mêmes
+proportions pour <em>X</em>, <em>Y</em> et <em>Z</em> dans le <em>cache</em>.
+Si seule <em>A1</em> a accédé à la base, alors on ne trouvera
+que des données de <em>X</em> (en supposant que la taille
+de cette dernière soit suffisante pour remplir le
+cache).</p>
+<p>Quand il reste de la place dans  le <em>cache</em>, on peut l’utiliser
+en effectuant des <em>lectures en avance</em> (<em>read ahead</em>,
+ou <em>prefetching</em>). Une application typique de ce principe
+est donnée par la lecture d’une table.  Comme nous le verrons au
+moment de l’étude des algorithmes de jointure, il est fréquent
+d’avoir à lire une table séquentiellement, bloc à bloc.
+Il s’agit d’un cas où, même si à un moment donné on n’a besoin que d’un
+ou de quelques blocs, on sait que toute la table devra être parcourue.
+Il vaut mieux alors, au moment où on effectue une lecture sur une piste,
+charger en mémoire tous les blocs de la relation, y compris
+ceux qui ne serviront que dans quelques temps et peuvent
+être placés dans un cache en attendant.</p>
+</section>
+</section>
+<section id="id2">
+<h3>Quiz<a class="headerlink" href="#id2" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Que contient le <em>cache</em>?</p>
+<div class="reauthoring_embedded_quiz" id="cache-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> une copie des blocs de la base</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> des données complémentaires à celles stockées sur le disque</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> c’est un espace mémoire fourni aux applications qui utilisent la base.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Un <em>cache</em> peut-il être plus grand que la base sur le disque?</p>
+<div class="reauthoring_embedded_quiz" id="cache-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> non</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> oui, et ça peut être utile</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> oui, mais ça n’a aucun intérêt</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Peut-il y avoir plus de lectures physiques de de lectures logiques?</p>
+<div class="reauthoring_embedded_quiz" id="cache-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Peut-il y avoir plus de lectures logiques  de de lectures physiques?</p>
+<div class="reauthoring_embedded_quiz" id="cache-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Une mise à jour se fait:</p>
+<div class="reauthoring_embedded_quiz" id="cache-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> sur le disque, puis le bloc est transféré dans le <em>cache</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> dans le <em>cache</em>, puis le bloc est immédiatement  transféré sur le disque</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> dans le <em>cache</em>, sans transfert immédiat</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est le danger d’effectuer une mise à jour dans le <em>cache</em> et pas sur le disque?</p>
+<div class="reauthoring_embedded_quiz" id="cache-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> la mise à jour n’est pas visible en lecture par les autres applications</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> la mise à jour peut être perdue en cas de panne</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on perd en performance</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Parmi les arguments contre l’écriture immédiate d’un bloc contenant un enregistrement modifié,
+lequel vous semble faux?</p>
+<div class="reauthoring_embedded_quiz" id="cache-7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on évite d’écrire un bloc complet à chaque modification</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on peut modifier un même enregistrement plusieurs fois de suite sans avoir à écrire sur le disque</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> on évite d’écraser des mises à jour faites par d’autres applications</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on peut changer d’avis et revenir à la version stockée sur le disque</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est le critère de proximité le plus précis parmi les suivants</p>
+<div class="reauthoring_embedded_quiz" id="cache-7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> être sur des pistes proches</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> être sur la même piste</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> être dans le même bloc</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> être dans le même cylindre</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s3-enregistrements-blocs-et-fichiers">
+<h2>S3: Enregistrements, blocs et fichiers<a class="headerlink" href="#s3-enregistrements-blocs-et-fichiers" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slfichiers.pdf">Diapositives: Enregistrements, blocs et fichiers</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc99df81bkjcjs5/">Vidéo sur les enregistrements, blocs et fichiers</a></p></li>
+</ul>
+</div>
+<p>Pour le système d’exploitation, un fichier est une séquence
+d’octets sur un disque. Les fichiers
+gérés par un SGBD sont un peu plus structurés. Ils sont
+constitués de <em>blocs</em>, qui eux-même contiennent des <em>enregistrements</em> (<em>records</em> en anglais),
+lesquels représentent physiquement les <em>entités</em>  du SGBD.
+Selon le modèle logique du SGBD, ces entités peuvent être
+des n-uplets dans une relation, ou des objets. Nous nous limiterons
+au premier cas dans ce qui suit.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>À partir de maintenant le terme vague de « données »
+que nous avons utilisé jusqu’à présent désigne précisément
+un <em>enregistrement</em>. Dit autrement, les enregistrements
+constituent notre unité de gestion de l’information: on ne
+descend jamais à une granularité plus fine.</p>
+</div>
+<section id="enregistrements">
+<h3>Enregistrements<a class="headerlink" href="#enregistrements" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un n-uplet dans une table relationnelle
+est constitué d’une liste d’attributs, chacun ayant
+un type. À ce n-uplet est représenté physiquement, sous forme binaire, par un
+enregistrement, constitué de <em>champs</em> (<em>field</em> en
+anglais). Chaque type d’attribut détermine la taillle
+du champ nécessaire pour stocker une instance du type. Le
+<a class="reference internal" href="#types-sql"><span class="std std-numref">Tableau 2.3</span></a> donne la taille habituelle
+utilisée pour les principaux types de la norme SQL,
+étant entendu que les systèmes sont libres de choisir
+le mode de stockage.</p>
+<blockquote>
+<div><span id="types-sql"></span><table class="colwidths-given docutils align-default" id="id13">
+<caption><span class="caption-number">Tableau 2.3 </span><span class="caption-text">Types SQL et tailles (en octets)</span><a class="headerlink" href="#id13" title="Lien permanent vers ce tableau">¶</a></caption>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 57%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Taille (en octets)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>SMALLINT</p></td>
+<td><p>2</p></td>
+</tr>
+<tr class="row-odd"><td><p>INTEGER</p></td>
+<td><p>4</p></td>
+</tr>
+<tr class="row-even"><td><p>BIGINT</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>FLOAT</p></td>
+<td><p>4</p></td>
+</tr>
+<tr class="row-even"><td><p>DOUBLE PRECISION</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>NUMERIC (M, D)</p></td>
+<td><p>M, D+2  si M &lt; D</p></td>
+</tr>
+<tr class="row-even"><td><p>DECIMAL (M, D)</p></td>
+<td><p>M, D+1 si M &lt; D</p></td>
+</tr>
+<tr class="row-odd"><td><p>CHAR(M)</p></td>
+<td><p>M</p></td>
+</tr>
+<tr class="row-even"><td><p>VARCHAR(M)</p></td>
+<td><p>L+1, avec L <span class="math notranslate nohighlight">\(\leq\)</span> M</p></td>
+</tr>
+<tr class="row-odd"><td><p>BIT VARYING</p></td>
+<td><p><span class="math notranslate nohighlight">\(&lt; 2^8\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p>DATE</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>TIME</p></td>
+<td><p>6</p></td>
+</tr>
+<tr class="row-even"><td><p>DATETIME</p></td>
+<td><p>14</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>La taille d’un enregistrement est, en première approximation,
+la somme des tailles des champs stockant ses attributs.
+En pratique les choses sont un peu plus compliquées.
+Les champs – et donc les enregistrements –
+peuvent être de taille variable par exemple.
+Si la taille de l’un de ces enregistrements de taille variable
+augmente au cours d’une mise
+à jour, il faut pouvoir trouver un espace libre. Se pose
+également la question de la représentation des valeurs à
+<code class="docutils literal notranslate"><span class="pre">NULL</span></code>. Nous discutons des principaux aspects
+de la représentation des enregistrements dans ce qui suit.</p>
+<section id="champs-de-tailles-fixe-et-variable">
+<h4>Champs de tailles fixe et variable<a class="headerlink" href="#champs-de-tailles-fixe-et-variable" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Comme l’indique le  <a class="reference internal" href="#types-sql"><span class="std std-numref">Tableau 2.3</span></a>,
+les types de la norme SQL peuvent être divisés en
+deux catégories : ceux qui peuvent
+être représentés par un champ une taille fixe,
+et ceux qui sont représentés par un champ de taille variable.</p>
+<p>Les types numériques (entiers et flottants) sont stockés
+au format binaire sur 2, 4 ou 8 octets. Quand on utilise
+un type <code class="docutils literal notranslate"><span class="pre">DECIMAL</span></code> pour fixer la précision, les
+nombres sont en revanche stockés sous la forme
+d’une chaîne de caractères. Par exemple
+un champ de type <code class="docutils literal notranslate"><span class="pre">DECIMAL(12,2)</span></code> sera
+stocké sur 12 octets, les deux derniers correspondant
+aux deux décimales. Chaque octet contient un caractère
+représentant un chiffre.</p>
+<p>Les types <code class="docutils literal notranslate"><span class="pre">DATE</span></code> et <code class="docutils literal notranslate"><span class="pre">TIME</span></code> peuvent
+être simplement représentés sous la forme de chaînes
+de caractères, aux formats respectifs “AAAAMMJJ” et
+“HHMMSS”.</p>
+<p>Le type <code class="docutils literal notranslate"><span class="pre">CHAR</span></code> est particulier : il indique
+une chaîne de taille fixe, et un  <code class="docutils literal notranslate"><span class="pre">CHAR(5)</span></code>
+sera donc stocké sur 5 octets. Se pose alors
+la question : comment est représentée la valeur « Bou » ?
+Il y a deux solutions :</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>on complète les deux derniers caractères avec des blancs ;</p></li>
+<li><p>on complète les deux derniers caractères avec un
+caractère conventionnel.</p></li>
+</ol>
+</div></blockquote>
+<p>La convention adoptée influe sur les comparaisons
+puisque dans un cas on a stocké « Bou   »
+(avec deux blancs), et dans l’autre
+« Bou » sans caractères complétant la longueur fixée. Si on utilise
+le type <code class="docutils literal notranslate"><span class="pre">CHAR</span></code> il est important d’étudier la convention
+adoptée par le SGBD.</p>
+<p>On utilise beaucoup plus souvent le type <code class="docutils literal notranslate"><span class="pre">VARCHAR(n)</span></code>
+qui permet de stocker des chaînes de longueur variable. Il
+existe (au moins) deux possibilités :</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>le champ est de longueur <em>n+1</em>, le premier octet
+contenant un entier indiquant la longueur
+exacte de la chaîne ; si on stocke
+« Bou » dans un <code class="docutils literal notranslate"><span class="pre">VARCHAR(10)</span></code>, on aura
+un codage « 3Bou », le premier octet codant
+un 3 (au format
+binaire), les trois octets suivants des caratères “B”, “o”
+et “u”, et les 7 octets suivants restant inutilisés ;</p></li>
+<li><p>le champ est de longueur <em>l+1</em>, avec <em>l &lt; n</em> ; ici
+on ne stocke pas les octets inutilisés, ce qui permet
+d’économiser de l’espace.</p></li>
+</ol>
+</div></blockquote>
+<p>Noter qu’en représentant un entier sur un octet, on limite
+la taille maximale d’un <code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code> à 255 (vous voyez pourquoi?).
+Une variante qui peut lever cette limite consiste à remplacer l’octet
+initial contenant la taille par un caractère de terminaison
+de la chaîne (comme en C).</p>
+<p>Le type <code class="docutils literal notranslate"><span class="pre">BIT</span> <span class="pre">VARYING</span></code> peut être représenté comme un
+<code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code>, mais comme l’information stockée
+ne contient pas que des caractères codés en ASCII,
+on ne peut pas utiliser
+de caractère de terminaison puisqu’on ne saurait
+pas le distinguer des caractères de la valeur stockée.
+On préfixe donc le champ par la taille utile,
+sur 2, 4 ou 8 octets selon la taille maximale
+autorisé pour ce type.</p>
+<p>On peut utiliser un stockage optimisé dans le cas
+d’un type énuméré dont les instances
+ne peuvent prendre leur (unique) valeur que dans
+un ensemble explicitement spécifié (par exemple
+avec une clause <code class="docutils literal notranslate"><span class="pre">CHECK</span></code>). Prenons
+l’exemple de l’ensemble de valeurs suivant </p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">valeur1</span><span class="p">,</span> <span class="n">valeur2</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">valeurN</span>
+</pre></div>
+</div>
+<p>Le SGBD doit contrôler, au moment de l’affectation d’une valeur
+à un attribut de ce type, qu’elle appartient bien
+à l’ensemble énuméré {valeur1, valeur2, …, valeurN}.
+On peut alors stocker
+l’indice de la valeur, sur 1 ou 2 octets selon la taille
+de l’ensemble énuméré (au maximum 65535 valeurs pour 2 octets).
+Cela représente un gain d’espace, notamment si les valeurs
+consistent en chaînes de caractères.</p>
+</section>
+<section id="en-tete-d-enregistrement">
+<h4>En-tête d’enregistrement<a class="headerlink" href="#en-tete-d-enregistrement" title="Lien permanent vers ce titre">¶</a></h4>
+<p>De même que l’on préfixe
+un champ de longueur variable par sa taille
+utile, il est souvent nécessaire de stocker quelques
+informations complémentaires sur un enregistrement dans un en-tête.
+Ces informations peuvent être ;</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>la taille de l’enregistrement, s’il est de taille
+variable ;</p></li>
+<li><p>un pointeur vers le schéma de la table,
+pour savoir quel est le type de l’enregistrement ;</p></li>
+<li><p>la date de dernière mise à jour ;</p></li>
+<li><p>etc.</p></li>
+</ul>
+</div></blockquote>
+<p>On peut également utiliser cet en-tête pour les
+valeurs <code class="docutils literal notranslate"><span class="pre">NULL</span></code>. L’absence de valeur pour
+un des attributs est en effet délicate à gérer : si on
+ne stocke rien, on risque de perturber le découpage du champ,
+tandis que si on stocke une valeur conventionnelle, on
+perd de l’espace.
+Une solution possible consiste à créer un masque de bits,
+un pour chaque champ de l’enregistrement, et à donner
+à chaque bit la valeur 0 si le champ est <code class="docutils literal notranslate"><span class="pre">NULL</span></code>,
+et 1 sinon. Ce masque peut être stocké dans l’en-tête
+de l’enregistrement, et on peut alors se permettre
+de ne pas utiliser d’espace pour une valeur
+<code class="docutils literal notranslate"><span class="pre">NULL</span></code>, tout en restant en mesure de décoder
+correctement la chaîne d’octets constituant
+l’enregistrement.</p>
+<div class="admonition-exemple admonition" id="ex1">
+<p class="admonition-title">Exemple</p>
+<p>Prenons l’exemple d’une  table <em>Film</em> avec les attributs
+<code class="docutils literal notranslate"><span class="pre">id</span></code> de type <code class="docutils literal notranslate"><span class="pre">INTEGER</span></code>,
+<code class="docutils literal notranslate"><span class="pre">titre</span></code> de type <code class="docutils literal notranslate"><span class="pre">VARCHAR(50)</span></code> et
+<code class="docutils literal notranslate"><span class="pre">annee</span></code> de type <code class="docutils literal notranslate"><span class="pre">INTEGER</span></code>.  Regardons la
+représentation  de l’enregistrement <code class="docutils literal notranslate"><span class="pre">(123,</span> <span class="pre">'Vertigo',</span> <span class="pre">NULL)</span></code>
+(donc l’année est inconnue).</p>
+<p>L’identifiant est stocké sur 4 octets, et le titre
+sur 8 octets, dont un pour la longueur.
+L’en-tête de l’enregistrement contient un
+pointeur vers le schéma de la table, sa longueur totale (soit
+4 + 8), et un masque de bits 110 indiquant que le troisième
+champ est à <code class="docutils literal notranslate"><span class="pre">NULL</span></code>. La   <a class="reference internal" href="#exenr"><span class="std std-numref">Fig. 2.8</span></a>  montre
+cet enregistrement : notez qu’en lisant l’en-tête, on sait
+calculer l’adresse de l’enregistrement suivant.</p>
+</div>
+<figure class="align-center" id="id14">
+<span id="exenr"></span><a class="reference internal image-reference" href="_images/exenr.png"><img alt="_images/exenr.png" src="_images/exenr.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.8 </span><span class="caption-text">Représentation d’un enregistrement</span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+</section>
+<section id="blocs">
+<h3>Blocs<a class="headerlink" href="#blocs" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le stockage des enregistrements dans un fichier doit
+tenir compte du découpage en blocs de ce fichier.
+En général il est possible de placer plusieurs enregistrements
+dans un bloc, et on veut éviter qu’un
+enregistrement chevauche deux blocs. Le nombre
+maximal d’enregistrements de taille <em>E</em> pour un bloc de taille
+<em>B</em> est donné par <span class="math notranslate nohighlight">\(\lfloor B/E \rfloor\)</span> où la notation
+<span class="math notranslate nohighlight">\(\lfloor x \rfloor\)</span> désigne le plus grand entier
+inférieur à <em>x</em>.</p>
+<p>Prenons l’exemple d’un fichier stockant une
+table qui ne contient pas d’attributs de longueur variable – en
+d’autres termes, elle n’utilise pas les types <code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code> ou
+<code class="docutils literal notranslate"><span class="pre">BIT</span> <span class="pre">VARYING</span></code>. Les enregistrements ont alors une taille
+fixe obtenue en effectuant la somme des tailles de chaque attribut.
+Supposons que cette taille soit en
+l’occurrence 84 octets, et que la taille de bloc soit 4096 octets.
+On va de plus considérer que chaque bloc contient
+un en-tête de 100 octets pour stocker des informations
+comme l’espace libre disponible dans le bloc,
+un chaînage avec d’autres blocs, etc.
+On peut donc placer</p>
+<div class="math notranslate nohighlight">
+\[\lfloor \frac{4096 - 100}{84} \rfloor = 47\]</div>
+<p>enregistrements dans un bloc.  Notons qu’il reste
+dans chaque bloc <span class="math notranslate nohighlight">\(3996 - (47 \times 84) = 48\)</span>  octets
+inutilisés dans chaque bloc.</p>
+<figure class="align-center" id="id15">
+<span id="blocenr1"></span><a class="reference internal image-reference" href="_images/blocenr1.png"><img alt="_images/blocenr1.png" src="_images/blocenr1.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.9 </span><span class="caption-text">Stockage des enregistrements dans un bloc</span><a class="headerlink" href="#id15" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le transfert en mémoire de
+l’enregistrement 563 de ce fichier
+est simplement effectué en déterminant dans quel bloc il se trouve
+(soit <span class="math notranslate nohighlight">\(\lfloor 563/47 \rfloor + 1 = 12\)</span>),
+en chargeant le douzième bloc en mémoire centrale
+et en prenant dans ce bloc l’enregistrement. Le premier
+enregistrement du bloc 12 a le numéro <span class="math notranslate nohighlight">\(11 \times 47 + 1 = 517\)</span>,
+et le dernier enregistrement le numéro <span class="math notranslate nohighlight">\(12 \times 47 = 564\)</span>.
+L’enregistrement 563 est donc l’avant-dernier du bloc,
+avec pour numéro interne le 46 (voir   <a class="reference internal" href="#blocenr1"><span class="std std-numref">Fig. 2.9</span></a>).</p>
+<p>Le petit calcul qui précède montre comment on
+peut localiser physiquement un enregistrement :
+par son fichier, puis par le bloc, puis par la position
+dans le bloc. En supposant que le fichier
+est codé par “F1”, l’adresse de l’enregistrement
+peut être représentée par “F1.12.46”.</p>
+<p>Il y a beaucoup d’autres modes d’adressage possibles. L’inconvénient
+d’utiliser une adresse physique par exemple est que l’on
+ne peut pas changer un enregistrement de place
+sans rendre du même coup invalides les pointeurs
+sur cet enregistrement (dans les index par exemple).</p>
+<p>Pour permettre le déplacement des enregistrements
+on peut combiner une <em>adresse logique</em> qui identifie
+un enregistrement indépendamment de sa localisation.
+Une table de correspondance permet de gérer l’association
+entre l’adresse physique et l’adresse logique
+(voir   <a class="reference internal" href="#blocenr2"><span class="std std-numref">Fig. 2.10</span></a>).
+Ce mécanisme d’indirection permet beaucoup
+de souplesse dans l’organisation et la réorganisation
+d’une base puisqu’il il suffit de référencer systématiquement
+un enregistrement par son adresse logique, et de
+modifier l’adresse physique dans la table quand
+un déplacement est effectué. En revanche il entraîne
+un coût additionnel puisqu’il faut systématiquement
+inspecter la table de correspondance pour accéder aux données.</p>
+<figure class="align-center" id="id16">
+<span id="blocenr2"></span><a class="reference internal image-reference" href="_images/blocenr2.png"><img alt="_images/blocenr2.png" src="_images/blocenr2.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.10 </span><span class="caption-text">Adressage avec indirection</span><a class="headerlink" href="#id16" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Une solution intermédiaire combine adressages physique
+et logique. Pour localiser un enregistrement on donne
+l’adresse physique de son bloc, puis, dans le bloc
+lui-même, on gère une table donnant la localisation
+au sein du bloc ou, éventuellement, dans un autre bloc.</p>
+<p>Reprenons l’exemple de l’enregistrement F1.12.46. Ici
+F1.12 indique bien le bloc 12 du fichier F1. En revanche
+46 est une identification logique de l’enregistrement,
+gérée au sein du bloc. La   <a class="reference internal" href="#blocenr3"><span class="std std-numref">Fig. 2.11</span></a>
+montre cet adressage à deux niveaux : dans le bloc F1.12,
+l’enregistrement 46 correspond à un emplacement au sein du bloc,
+tandis que l’enregistrement 57 a été déplacé dans un autre bloc.</p>
+<figure class="align-center" id="id17">
+<span id="blocenr3"></span><a class="reference internal image-reference" href="_images/blocenr3.png"><img alt="_images/blocenr3.png" src="_images/blocenr3.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.11 </span><span class="caption-text">Combinaison adresse logique/adresse physique</span><a class="headerlink" href="#id17" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Noter que l’espace libre dans le bloc est situé
+entre l’en-tête du bloc et les enregistrements eux-mêmes.
+Cela permet d’augmenter simultanément ces deux composantes
+au moment d’une insertion par exemple,
+sans avoir à effectuer de réorganisation interne du bloc.</p>
+<p>Ce mode d’identification offre beaucoup
+d’avantages, et est utilisé par ORACLE par exemple. Il
+permet de réorganiser souplement l’espace interne à un bloc.</p>
+<section id="enregistrements-de-taille-variable">
+<h4>Enregistrements de taille variable<a class="headerlink" href="#enregistrements-de-taille-variable" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Une table qui contient des attributs <code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code>
+ou <code class="docutils literal notranslate"><span class="pre">BIT</span> <span class="pre">VARYING</span></code> est représentée par des enregistrements de
+taille variable. Quand un enregistrement est inséré dans le
+fichier, on calcule sa taille non pas d’après le <em>type</em> des
+attributs, mais d’après le nombre réel d’octets nécessaires
+pour représenter les <em>valeurs</em> des attributs. Cette taille doit
+de plus être stockée au début de l’emplacement pour que
+le SGBD puisse déterminer le début de l’enregistrement suivant.</p>
+<p>Il peut arriver que l’enregistrement soit mis à jour, soit pour
+compléter la valeur d’un attribut, soit pour donner une valeur à
+un attribut qui était initialement à <code class="docutils literal notranslate"><span class="pre">NULL</span></code>. Dans un tel
+cas il est possible que la place initialement réservée soit
+insuffisante pour contenir les nouvelles informations qui doivent
+être stockées dans un autre emplacement du même
+fichier.  Il faut alors  créer  un <em>chaînage</em> entre
+l’enregistrement initial et les parties complémentaires qui ont
+dû être créées.</p>
+<figure class="align-center" id="id18">
+<span id="blocenr4"></span><a class="reference internal image-reference" href="_images/blocenr4.png"><img alt="_images/blocenr4.png" src="_images/blocenr4.png" style="width: 90%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.12 </span><span class="caption-text">Mises à jour d’un enregistrement de taille variable</span><a class="headerlink" href="#id18" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Considérons par exemple le scénario
+suivant, illustré dans la <a class="reference internal" href="#blocenr4"><span class="std std-numref">Fig. 2.12</span></a> :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on insère dans la table <em>Film</em> un film
+<em>Marnie</em>, sans résumé ; l’enregistrement
+correspondant est stocké dans le bloc
+F1.12, et prend le numéro 46 ;</p></li>
+<li><p>on insère un autre film, stocké à l’emplacement 47
+du bloc F1.12 ;</p></li>
+<li><p>on s’aperçoit alors que le titre exact est  <em>Pas de
+printemps pour Marnie</em>, ce qui peut se corriger avec un
+ordre <code class="docutils literal notranslate"><span class="pre">UPDATE</span></code> : si l’espace libre
+restant dans le bloc est suffisant, il suffit
+d’effectuer une réorganisation interne pendant
+que le bloc est en mémoire centrale, réorganisation
+qui a un coût nul en terme d’entrées/sorties ;</p></li>
+<li><p>enfin on met à nouveau l’enregistrement à jour pour
+stocker le résumé qui était resté à
+<code class="docutils literal notranslate"><span class="pre">NULL</span></code> : cette fois il ne reste plus
+assez de place libre dans le bloc, et
+l’enregistrement doit être déplacé dans un autre bloc,
+tout en gardant la même adresse.</p></li>
+</ul>
+</div></blockquote>
+<p>Au lieu de déplacer l’enregistrement entièrement (solution
+adoptée par Oracle par exemple), on
+pourrait le fragmenter en stockant le résumé dans un autre bloc,
+avec un chaînage au niveau de l’enregistrement (solution
+adoptée par MySQL).
+Le déplacement (ou la fragmentation)
+des enregistrements de taille variable est
+évidemment pénalisante pour les performances.  Il faut effectuer
+autant de lectures sur le disque qu’il y a d’indirections
+(ou de fragments), et on peut
+donc assimiler le coût d’une lecture d’un enregistrement en <em>n</em>
+parties, à <em>n</em> fois le coût d’un enregistrement compact. Un SGBD comme Oracle permet
+de réserver un espace disponible dans chaque bloc
+pour l’agrandissement des enregistrements
+afin d’éviter de telles réorganisations.</p>
+<p>Les enregistrements de taille variable sont un peu plus
+compliqués à gérer pour le SGBD que ceux de taille fixe. Les modules
+accédant au fichier doivent prendre en compte les
+en-têtes de bloc ou d’enregistrement pour savoir
+où commence et où finit un enregistrement donné.</p>
+<p>En contrepartie, un fichier contenant des enregistrements de taille
+variable utilise souvent mieux l’espace qui lui est attribué. Si on
+définissait par exemple le titre d’un film et les autres attributs
+de taille variable comme des <code class="docutils literal notranslate"><span class="pre">CHAR</span></code> et pas comme des
+<code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code>, tous les enregistrements seraient de
+taille fixe, au prix de beaucoup d’espace  perdu puisque la taille
+choisie correspond souvent à des cas extrêmes rarement
+rencontrés – un titre de film va rarement jusqu’à 50 octets.</p>
+</section>
+</section>
+<section id="fichiers">
+<h3>Fichiers<a class="headerlink" href="#fichiers" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Les systèmes d’exploitation organisent les fichiers
+qu’ils gèrent dans une arborescence de <em>répertoires</em>.
+Chaque répertoire contient un ensemble de fichiers
+identifés de manière unique (au sein du répertoire)
+par un nom. Il faut bien distinguer l’emplacement
+<em>physique</em> du fichier sur le disque
+et son emplacement <em>logique</em> dans l’arbre des répertoires
+du système. Ces deux aspects sont indépendants : il
+est possible de changer le nom d’un fichier
+ou de modifier son répertoire sans que cela affecte ni
+son emplacement physique ni son contenu.</p>
+<section id="organisation-de-fichier">
+<h4>Organisation de fichier<a class="headerlink" href="#organisation-de-fichier" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Du point de vue du SGBD, un fichier est une liste de blocs,
+regroupés sur certaines pistes ou répartis aléatoirement sur
+l’ensemble du disque et chaînés entre eux.  La première solution est
+bien entendu préférable pour obtenir de bonnes performances, et les
+SGBD tentent dans la mesure du possible de gérer des fichiers
+constitués de blocs consécutifs. Quand il n’est pas possible de
+stocker un fichier sur un seul espace contigu (par exemple un seul
+cylindre du disque), une solution intermédiaire est de chaîner entre
+eux de tels espaces.</p>
+<p>Le terme <em>d’organisation</em> pour un fichier désigne la
+structure utilisée pour stocker les enregistrements du fichier.
+Une bonne organisation a pour but de limiter les ressources
+en espace et en temps consacrées à la gestion du fichier.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Espace</em>. La situation optimale est celle où
+la taille d’un fichier
+est la somme des tailles des enregistrements du fichier.
+Cela implique qu’il y ait peu, ou pas, d’espace inutilisé
+dans le fichier.</p></li>
+<li><p><em>Temps</em>. Une bonne organisation doit favoriser
+les opérations sur un fichier. En pratique, on s’intéresse
+plus particulièrement à la recherche d’un enregistrement,
+notamment parce que cette opération conditionne l’efficacité
+de la mise  à jour et de la destruction. Il ne faut pas
+pour autant négliger le coût des insertions.</p></li>
+</ul>
+</div></blockquote>
+<p><em>L’efficacité en espace</em> peut être mesurée comme le rapport entre le
+nombre de blocs utilisés et le nombre minimal de blocs nécessaire. Si,
+par exemple, il est possible de stocker 4 enregistrements dans un
+bloc, un stockage optimal de 1000 enregistrements occupera 250
+blocs.  Dans une mauvaise organisation il n’y aura qu’un
+enregistrement par bloc et 1000 blocs seront nécessaires. Dans le pire
+des cas l’organisation autorise des blocs vides et la taille du
+fichier devient indépendante du nombre d’enregistrements.</p>
+<p>Il est difficile de garantir une utilisation optimale de l’espace à
+tout moment à cause des destructions et modifications. Une bonne
+gestion de fichier doit avoir pour but – entre autres – de
+réorganiser dynamiquement le fichier afin de préserver une utilisation
+satisfaisante de l’espace.</p>
+<p><em>L’efficacité en temps</em> d’une organisation de fichier se définit
+en fonction d’une opération donnée (par exemple l’insertion, ou la
+recherche) et se mesure par le rapport entre le nombre de blocs lus
+et la taille totale du fichier. Pour une recherche par exemple, il
+faut dans le pire des cas lire tous les blocs du fichier pour trouver un
+enregistrement, ce qui donne une complexité linéaire. Certaines
+organisations permettent d’effectuer des recherches en temps
+sous-linéaire : arbres-B (temps logarithmique) et hachage (temps
+constant).</p>
+<p>Une bonne organisation doit réaliser
+un bon compromis pour les quatres
+principaux types d’opérations :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>insertion d’un enregistrement ;</p></li>
+<li><p>recherche d’un enregistrement ;</p></li>
+<li><p>mise à jour d’un enregistrement ;</p></li>
+<li><p>destruction d’un enregistrement.</p></li>
+</ul>
+</div></blockquote>
+<p>Dans ce qui suit nous discutons de ces quatre opérations
+sur la structure la plus simple qui soit, le <em>fichier
+séquentiel</em> (non ordonné).
+Le chapitre suivant est consacré aux techniques d’indexation
+et montrera comment on
+peut optimiser les opérations d’accès à un fichier séquentiel.</p>
+<p>Dans un fichier séquentiel (<em>sequential file</em>
+ou <em>heap file</em>), les enregistrements sont stockés
+dans l’ordre d’insertion, et à la première place
+disponible. Il n’existe en particulier aucun ordre
+sur les enregistrements qui pourrait faciliter une recherche.
+En fait, dans cette organisation, on recherche plutôt
+une bonne utilisation de l’espace et de bonnes performances pour
+les opérations de mise à jour.</p>
+</section>
+<section id="recherche">
+<h4>Recherche<a class="headerlink" href="#recherche" title="Lien permanent vers ce titre">¶</a></h4>
+<p>La recherche consiste à trouver le ou les enregistrements
+satisfaisant un ou plusieurs critères. On peut rechercher
+par exemple tous les films parus en 2001, ou bien
+ceux qui sont parus en 2001 et dont le titre commence
+par “V”, ou encore n’importe quelle combinaison
+booléenne de tels critères.</p>
+<p>La complexité des critères de sélection n’influe pas
+sur le coût de la recherche dans un fichier séquentiel.
+Dans tous les cas on doit partir du début du fichier,
+lire un par un tous les enregistrements en mémoire centrale,
+et effectuer à ce moment-là le test sur les critères
+de sélection. Ce test s’effectuant en mémoire centrale,
+sa complexité peut être considérée comme négligeable
+par rapport au temps de chargement de tous les blocs
+du fichier.</p>
+<p>Quand on ne sait par à priori combien d’enregistrements
+on va trouver, il faut systématiquement parcourir tout le fichier.
+En revanche, si on fait une recherche par clé unique, on
+peut s’arrêter dès que l’enregistrement est trouvé.
+Le coût moyen est dans ce cas égal à <span class="math notranslate nohighlight">\(\frac{n}{2}\)</span>,
+<em>n</em> étant le nombre de blocs.</p>
+<p>Si le fichier est trié sur le champ servant de critère de recherche,
+il est possible d’effectuer un recherche par dichotomie qui est
+beaucoup plus efficace. Prenons l’exemple de la
+recherche du film <em>Scream</em>.
+L’algorithme est simple :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>prendre le bloc au milieu du fichier ;</p></li>
+<li><p>si on y trouve <em>Scream</em> la recherche est terminée ;</p></li>
+<li><p>sinon, soit les films contenus dans le bloc
+précèdent <em>Scream</em> dans l’ordre lexicographique,
+et la recherche doit continuer dans la partie droite,
+du fichier, soit la recherche doit continuer dans la partie
+gauche ;</p></li>
+<li><p>on recommence à l’étape (1), en prenant pour espace
+de rercherche la moitié droite ou gauche du fichier,
+selon le résultat de l’étape 2.</p></li>
+</ul>
+</div></blockquote>
+<p>L’algorithme est récursif et permet de diminuer par deux,
+à chaque étape, la taille de l’espace de recherche.
+Si cette taille, initialement, est de <em>n</em> blocs,
+elle passe à <span class="math notranslate nohighlight">\(\frac{n}{2}\)</span> à l’étape 1,
+à <span class="math notranslate nohighlight">\(\frac{n}{2^2}\)</span> à l’étape 2, et plus généralement
+à <span class="math notranslate nohighlight">\(\frac{n}{2^k}\)</span> à l’étape <em>k</em>.</p>
+<p>Au pire, la recherche se termine quand il n’y a plus
+qu’un seul bloc à explorer, autrement dit
+quand <em>k</em> est tel que <span class="math notranslate nohighlight">\(n &lt; 2^k\)</span>. On en déduit le nombre
+maximal d’étapes : c’est le plus petit <em>k</em>
+tel que  <span class="math notranslate nohighlight">\(n &lt; 2^k\)</span>, soit <span class="math notranslate nohighlight">\(log_2(n) &lt; k\)</span>,
+soit <span class="math notranslate nohighlight">\(k = \lceil log_2(n) \rceil\)</span>.</p>
+<p>Pour un fichier de 100 Mo, un parcours séquentiel implique
+la lecture des 25~000 blocs, alors qu’une recherche
+par dichotomie ne demande que <span class="math notranslate nohighlight">\(\lceil log_2(25000) \rceil=15\)</span>
+lectures de blocs !! Le gain est considérable.</p>
+<p>L’algorithme décrit ci-dessus se heurte cependant en pratique
+à deux obstacles.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>en premier lieu il suppose que le fichier est organisé
+d’un seul tenant, et qu’il est possible à chaque étape
+de calculer le bloc du milieu ; en pratique
+cette hypothèse est très difficile à satisfaire ;</p></li>
+<li><p>en second lieu, le maintien de l’ordre dans un fichier
+soumis à des insertions, suppressions et mises à jour est
+très difficile à obtenir.</p></li>
+</ul>
+</div></blockquote>
+<p>Cette idée de se baser sur un tri pour effectuer des recherches
+efficaces est à la source de très nombreuses structures d’index qui
+seront étudiées dans le chapitre suivant. L’arbre-B, en particulier,
+peut être vu comme une structure résolvant les deux problèmes
+ci-dessus. D’une part il se base sur un système de pointeurs
+décrivant, à chaque étape de la recherche, l’emplacement de la partie
+du fichier qui reste à explorer, et d’autre part il utilise une
+algorithmique qui lui permet de se réorganiser dynamiquement
+sans perte de performance.</p>
+</section>
+<section id="mises-a-jour">
+<h4>Mises à jour<a class="headerlink" href="#mises-a-jour" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Au moment où on doit insérer un nouvel enregistrement dans
+un fichier, le problème est de trouver un bloc avec
+un espace libre suffisant. Il est hors de question
+de parcourir tous les blocs, et on ne peut pas se permettre
+d’insérer toujours à la fin du fichier car il faut
+réutiliser les espaces rendus disponibles par les
+destructions.
+La seule solution est de garder une structure annexe
+qui distingue les blocs pleins des autres, et permette
+de trouver rapidement un bloc avec de l’espace disponible.
+Nous présentons deux structures possibles.</p>
+<p>La première est une liste doublement
+chaînée des blocs libres (voir   <a class="reference internal" href="#pagelibres1"><span class="std std-numref">Fig. 2.13</span></a>).
+Quand de l’espace se libère dans un bloc plein, on
+l’insère à la fin de la liste chaînée. Inversement,
+quand un bloc libre devient plein, on le supprime de la liste.
+Dans l’exemple de la   <a class="reference internal" href="#pagelibres1"><span class="std std-numref">Fig. 2.13</span></a>, en
+imaginant que le bloc 8 devienne plein, on chainera ensemble
+les blocs 3 et 7 par un jeu classique de modification
+des adresses. Cette solution nécessite deux adresses
+(bloc précédent et bloc suivant) dans l’en-tête de
+chaque bloc, et l’adresse du premier bloc de la liste
+dans l’en-tête du fichier.</p>
+<figure class="align-center" id="id19">
+<span id="pagelibres1"></span><a class="reference internal image-reference" href="_images/pagelibres1.png"><img alt="_images/pagelibres1.png" src="_images/pagelibres1.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.13 </span><span class="caption-text">Gestion des blocs libres avec liste chaînée</span><a class="headerlink" href="#id19" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Un inconvénient de cette structure est qu’elle ne donne
+pas d’indication sur la quantité d’espace disponible dans les
+blocs. Quand on veut insérer un enregistrement de taille
+volumineuse, on risque d’avoir à parcourir une partie
+de la liste – et donc de lire plusieurs blocs – avant
+de trouver celui qui dispose d’un espace suffisant.</p>
+<p>La seconde solution repose sur une structure séparée des blocs du fichier. Il
+s’agit d’un répertoire qui donne, pour chaque page, un indicateur O/N indiquant
+s’il reste de l’espace, et un champ donnant le nombre d’octets
+(  <a class="reference internal" href="#pagelibres2"><span class="std std-numref">Fig. 2.14</span></a>).  Pour trouver un bloc avec une quantité
+d’espace libre donnée, il suffit de parcourir ce répertoire.</p>
+<figure class="align-center" id="id20">
+<span id="pagelibres2"></span><a class="reference internal image-reference" href="_images/pagelibres2.png"><img alt="_images/pagelibres2.png" src="_images/pagelibres2.png" style="width: 40%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 2.14 </span><span class="caption-text">Gestion des blocs libres avec répertoire</span><a class="headerlink" href="#id20" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le répertoire doit lui-même être stocké dans une ou plusieurs pages associées
+au fichier. Dans la mesure où l’on n’y stocke que très peu d’informations par
+bloc, sa taille sera toujours considérablement moins élévée que celle du
+fichier lui-même, et on peut considérer que le temps d’accès au répertoire est
+négligeable comparé aux autres opérations.</p>
+</section>
+</section>
+<section id="id3">
+<h3>Quiz<a class="headerlink" href="#id3" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Quelle est la différence entre un champ de type <code class="docutils literal notranslate"><span class="pre">varchar(25)</span></code> et un champ de type <code class="docutils literal notranslate"><span class="pre">varchar(250)</span></code>?</p>
+<div class="reauthoring_embedded_quiz" id="stock3-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le premier occupe 10 fois moins de place</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> le système refusera de stocker dans le premier une chaîne de plus de 25 octets</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> l’entête de l’enregistrement sera plus volumineuse pour le second</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Je représente l’adresse d’un enregistrement par son numéro de bloc <em>B</em>, et son
+numéro interne au bloc <em>i</em> (schéma d’indirection, vu ci-dessus). Quelle réponse est vraie?</p>
+<div class="reauthoring_embedded_quiz" id="stock3-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Je peux aller lire directement l’enregistrement sur le disque</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Je dois d’abord lire le bloc avant de trouver l’enregistrement</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’enregistrement est toujours en position <em>i</em> dans le bloc</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Un programmeur paresseux décide de simplifier la méthode d’insertion en insérant
+tous les nouveaux enregistrements dans le premier bloc du fichier. On connaît donc
+l’adresse du premier bloc, qui ne change jamais, et on ne connaît que ça. Quelle affirmation est vraie
+(en supposant que le système applique les méthodes de stockage vues précédemment)?</p>
+<div class="reauthoring_embedded_quiz" id="stock3-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va coincer dès que le premier bloc est plein</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va marcher, il faudra un, ou au pire  deux accès pour insérer un enregistrement</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Ca va marcher, mais le temps d’insertion devient proportionnel à la taille du fichier</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va marcher, mais le temps d’insertion devient imprévisible</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+<blockquote>
+<div><ul class="simple">
+<li><p>Autre méthode d’insertion standard : on insère toujours
+dans  le <em>dernier</em> bloc du fichier. On connaît donc
+l’adresse du dernier bloc, qui  change de temps en temps, et on ne connaît que ça</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="stock3-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va coincer dès que le dernier bloc est plein</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va marcher, le temps d’insertion est constant et le fichier et parfaitement rempli</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ca va marcher, le temps d’insertion est proportionnel à la taille du fichier et le fichier et parfaitement rempli</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Ca va marcher, le temps d’insertion est constant mais le fichier peut contenir des trous si on détruit des enregistrements</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</div></blockquote>
+<ul>
+<li><p>Je veux que mon fichier soit trié sur un champ, par exemple l’année du film.
+Quelles affirmations sont vraies?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="stock3-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Chaque insertion nécessite le parcours de tout le fichier pour trouver le bon emplacement</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Quand un bloc est plein, je peux appliquer la méthode de chaînage vue en cours</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Si je connais la valeur du champ recherché (par exemple l’année 1945), je peux y accéder avec une lecture de bloc en moyenne</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Si je connais la valeur du champ recherché (par exemple l’année 1945), je peux y accéder en parcourant tous les blocs</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Je veux stocker dans ma base, pour chaque film, son fichier vidéo MP4. Je choisis de créer un champ
+de type <code class="docutils literal notranslate"><span class="pre">BIT</span> <span class="pre">VARYING</span></code> pour le MP4. Quelle affirmation est vraie?</p>
+<div class="reauthoring_embedded_quiz" id="stock3-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Je ne peux pas car la taille d’un enregistrement sera supérieure à celle d’un bloc</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Cela va ralentir considérablement le temps de parcours séquentiel de ma table</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Je peux récupérer la vidéo grâce à une simple requête SQL.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Cela va améliorer mon <em>hit ratio</em></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-lecture-disque-temps-de-lecture-d-une-base admonition" id="ex-lecture-disque">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-lecture-disque">ex-lecture-disque</a>: temps de lecture d’une base</p>
+<p>Nous avons une base de 3 Tos.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Quel est le temps minimal de lecture   de la base complète sur un disque magnétique?</p></li>
+<li><p>On veut lire 100 objets de 10 octets. Combien de temps cela prend-il s’ils sont dispersés sur un disque?</p></li>
+<li><p>Même question s’ils sont en mémoire centrale</p></li>
+</ul>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Réponses:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>On compte 100 Mo/s pour le débit d’un disque. Il faut 10s pour 1 Go, 10 000 s. pour
+1 To et donc 30 000 s. pour 3 Tos. Soit plus de 8 heures….</p></li>
+<li><p>La taille des objets est négligeable, ce qui compte, ce sont les 100 accès
+qui prennent (ordre de grandeur) 10 ms chacun. Soit 1 seconde au total.</p></li>
+<li><p>En mémoire RAM l’ordre de grandeur d’un accès est la nanoseconde. Les 100 objets
+sont lus en 1 millionième de seconde.</p></li>
+</ul>
+</div></blockquote>
+</div>
+</div>
+<div class="admonition-exercice-ex-seqaleatoire-lectures-sequentielles-et-aleatoires-sur-un-disque admonition" id="ex-seqaleatoire">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-seqaleatoire">ex-seqaleatoire</a>: lectures séquentielles et aléatoires sur un disque</p>
+<p>On dispose d’une base de 3 Go constituée d’enregistrements dont la
+taille moyenne est 3 000 octets.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Combien de temps prend la lecture complète de cette base
+avec un <em>parcours séquentiel</em> ?</p></li>
+<li><p>Combien de temps prend la lecture en effectuant une lecture physique aléatoire
+pour chaque enregistrement ?</p></li>
+</ul>
+</div></blockquote>
+<p>Vous pouvez prendre les valeurs du <code class="xref std std-numref docutils literal notranslate"><span class="pre">tbl-memoires</span></code> pour les calculs.</p>
+</div>
+<div class="admonition-exercice-ex-perfdisque-specifications-d-un-disque-magnetique admonition" id="ex-perfdisque">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-perfdisque">ex-perfdisque</a>: Spécifications d’un disque magnétique</p>
+<p>Le  <a class="reference internal" href="#perfdisque2"><span class="std std-numref">Tableau 2.4</span></a> donne les spécifications
+partielles d’un disque magnétique. Répondez aux
+questions suivantes.</p>
+<blockquote>
+<div><blockquote>
+<div><ul class="simple">
+<li><p>Quelle est la capacité moyenne d’une piste?, d’un cylindre?
+d’une surface? du disque?</p></li>
+<li><p>Quel est le temps de latence maximal?</p></li>
+<li><p>Quel est le temps de latence moyen?</p></li>
+<li><p>Combien de temps faut-il pour transmettre le contenu d’une piste et combien de rotations
+peut effectuer le disque pendant ce temps?</p></li>
+</ul>
+</div></blockquote>
+<span id="perfdisque2"></span><table class="colwidths-given docutils align-default" id="id21">
+<caption><span class="caption-number">Tableau 2.4 </span><span class="caption-text">Un (vieux) disque magnétique</span><a class="headerlink" href="#id21" title="Lien permanent vers ce tableau">¶</a></caption>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 57%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Caractéristique</p></th>
+<th class="head"><p>Valeur</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Taille d’un secteur</p></td>
+<td><p>512 octets</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nbre de plateaux</p></td>
+<td><p>5</p></td>
+</tr>
+<tr class="row-even"><td><p>Nbre de têtes</p></td>
+<td><p>10</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nombre de secteurs</p></td>
+<td><p>5 335 031 400,00</p></td>
+</tr>
+<tr class="row-even"><td><p>Nombre de cylindres</p></td>
+<td><p>10 000</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nombre moyen de secteurs par piste</p></td>
+<td><p>40 000</p></td>
+</tr>
+<tr class="row-even"><td><p>Temps de positionnement moyen</p></td>
+<td><p>10 ms</p></td>
+</tr>
+<tr class="row-odd"><td><p>Vitesse de rotation</p></td>
+<td><p>7 400 rpm</p></td>
+</tr>
+<tr class="row-even"><td><p>Déplacement de piste à piste</p></td>
+<td><p>0,5  ms</p></td>
+</tr>
+<tr class="row-odd"><td><p>Débit moyen</p></td>
+<td><p>100 Mo / s</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Capacité d’une piste: <span class="math notranslate nohighlight">\(40\,000 \times 512 = 20\,480\,000\)</span>, soit 20 Mo</p></li>
+<li><p>Capacité d’un cylindre: <span class="math notranslate nohighlight">\(20\,480\,000 \times 10 = 204\,800\,000\)</span></p></li>
+<li><p>Capacité d’une surface: <span class="math notranslate nohighlight">\(20\,480\,000 \times 10\,000 = 200G\)</span></p></li>
+<li><p>Capacité du disque: 2 To</p></li>
+</ul>
+</div></blockquote>
+<p>Le temps de latence maximal est le temps pour une
+rotation complète. Ici on a <span class="math notranslate nohighlight">\(\frac{7400}{60}=123\)</span> rotations
+par seconde, soit une rotation toutes les 1/123=8 ms.
+Le temps moyen est de 4 ms.</p>
+<p>Il faut donc  transférer 20 Mo, ce qui prend 1/5 de seconde en tenant compte
+du débit maximal. En 500 millisecondes, on peut effectuer <span class="math notranslate nohighlight">\(\frac{500}{8}= 62\)</span>
+rotations: le débit est clairement le facteur pénalisant dans cette hypothèse.</p>
+</div>
+</div>
+<div class="admonition-exercice-ex-deplmoyen-temps-de-positionnement-moyen admonition" id="ex-deplmoyen">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-deplmoyen">ex-deplmoyen</a>: temps de positionnement moyen</p>
+<p>Etant donné un disque contenant <em>C</em> cylindres,  un temps de déplacement
+entre deux pistes adjacentes de <em>s</em> ms,  donner la formule exprimant le temps de positionnement
+moyen. On décrira une demande de déplacement par une paire <span class="math notranslate nohighlight">\([d, a]\)</span> où
+<em>d</em> est la piste de départ et <em>a</em> la piste d’arrivée, et on
+supposera que toutes les demandes possibles sont équiprobables.</p>
+<p>Attention,  on ne peut pas considérer que les têtes se déplacent en moyenne
+de <em>C/2</em> pistes. C’est vrai si la tête de lecture est au bord des plateaux ou de l’axe, mais
+pas si elle est au milieu du plateau. Il faut commencer
+par exprimer le temps de positionnement moyen en fonction d’une position de départ donnée, puis généraliser
+à l’ensemble des positions de départ possibles.</p>
+<p>On pourra utiliser les deux formules suivantes:</p>
+<div class="math notranslate nohighlight">
+\[\Sigma_{i=1}^{n} (i) = \frac{n\times(n+1)}{2}\]</div>
+<p>et</p>
+<div class="math notranslate nohighlight">
+\[\Sigma_{i=1}^{n} (i^2) = \frac{n\times(n+1)\times(2n+1)}{6}\]</div>
+<p>et commencer par exprimer le nombre moyen de déplacements
+en supposant que les têtes de lecture sont en position <em>p</em>.
+Il restera alors à effectuer la moyenne de l’expression
+obtenue, pour l’ensemble des valeurs possibles de <em>p</em>.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><p>On commence par calculer le temps en supposant connue la position
+courante des têtes de lecture, <em>p</em>, avec <span class="math notranslate nohighlight">\(1 &lt; p &lt; C\)</span>. Le nombre moyen
+de déplacements à effectuer vers une piste <em>i</em> avec <span class="math notranslate nohighlight">\(1 \leq i &lt; p\)</span> est,:</p>
+<div class="math notranslate nohighlight">
+\[\frac{1+2+\ldots + (p - 1)}{p - 1} = \frac{p \times (p -1)}{2 \times (p-1)} = \frac{p}{2}\]</div>
+<p>De même, le nombre moyen de déplacements à effectuer vers une piste
+<em>j</em> avec <span class="math notranslate nohighlight">\(p \leq j \leq C\)</span> est:</p>
+<div class="math notranslate nohighlight">
+\[\frac{1+2+\ldots + (C - p - 1)}{C - p} = \frac{(C- p) \times  (C - p +1)}{2 \times (C -p)} = \frac{C - p}{2}\]</div>
+<p>Noter que pour <span class="math notranslate nohighlight">\(p = C/2\)</span>, le nombre moyen de déplacements,
+dans un sens ou dans l’autre, est de <span class="math notranslate nohighlight">\(C/4\)</span>, alors que quand <em>p=1</em>,
+le temps de déplacement moyen est de <span class="math notranslate nohighlight">\(C/2\)</span>.</p>
+<p>Pour une position <em>p</em> donnée, la probabilité d’aller en <span class="math notranslate nohighlight">\(i &lt; p\)</span>
+est <em>p/C</em>, et celle d’aller en <em>j &gt; p</em> est <span class="math notranslate nohighlight">\((C - p) / C\)</span>. On
+obtient donc le nombre de déplacements moyen pour
+une position <em>p</em>:</p>
+<div class="math notranslate nohighlight">
+\[\frac{p^2}{2 \times C} +  \frac{(C - p)^2}{2 \times C}\]</div>
+<p>Il reste à effectuer la moyenne de cette expression pour l’ensemble
+des positions de départs possibles, ce qui donne</p>
+</div></blockquote>
+<div class="math notranslate nohighlight">
+\[\frac{1}{C} \times \Sigma_{i=1}^C (\frac{i^2 + (C - i)^2}{2 \times C})
+= \frac{1}{2\times C^2} \times 2 \times \Sigma_{i=1}^C (i^2)
+= \frac{1}{C^2}  \times \frac{C \times (C+1) \times (2C+1)}{6} \approx \frac{C}{3}\]</div>
+<p>On en déduit que le nombre de déplacements moyen est de l’ordre
+du tiers du nombre total de pistes (ou cylindres).</p>
+</div>
+</div>
+<div class="admonition-exercice-ex-delais-calcul-latence-et-positionnement admonition" id="ex-delais">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-delais">ex-delais</a>: calcul latence et positionnement</p>
+<p>Soit un disque de 5 000 cylindres tournant à 12 000 rotations par minute,
+avec un temps de déplacement entre deux pistes adjacentes égal à 0,002 ms et 500 secteurs
+de 512 octets par piste.</p>
+<p>Quel est le temps moyen de lecture d’un bloc de 4,096 octets?  Calculer indépendamment
+le délai de latence, de positionnement et le temps de transfert. NB: on sait
+par l’exercice précédent que le nombre moyen de déplacements et 1/3 du nombre total de pistes.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Temps de transfert (8/400 de rotation).</p></li>
+<li><p>Délai de latence,:  12000 rotations pour 60s, donc
+une rotation en 60/12000= 5 ms. Temps moyen de latence=2,5 ms.</p></li>
+<li><p>Temps moyen de positionnement,: environ 1/3 du temps total de balayage du disque,
+soit <span class="math notranslate nohighlight">\(\frac{0,002 \times 5000}{3} \approx 3\)</span> ms</p></li>
+</ul>
+</div>
+</div>
+<div class="admonition-exercice-ex-hitratio-comprendre-le-hit-ratio admonition" id="ex-hitratio">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-hitratio">ex-hitratio</a>: comprendre le <em>hit ratio</em></p>
+<p>On considère un fichier de 1 Go et un cache de 100 Mo.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>quel est le <em>hit ratio</em> en supposant que la
+probabilité de lire les blocs est uniforme?</p></li>
+<li><p>même question, en supposant que 80% des lectures
+concernent 200 Mo, les 20 % restant
+étant répartis uniformément sur  800 Mo?</p></li>
+<li><p>avec l’hypothèse précédente, jusqu’à quelle taille
+de cache peut-on espérer une amélioration
+significative du <em>hit ratio</em>?</p></li>
+</ul>
+</div></blockquote>
+<p>Prenez l’hypothèse que la stratégie de remplacement est de type LRU.</p>
+</div>
+<div class="admonition-exercice-ex-calculs-fichiers-quelques-calculs admonition" id="ex-calculs-fichiers">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-calculs-fichiers">ex-calculs-fichiers</a>: quelques calculs</p>
+<blockquote>
+<div><p>Soit la table de schéma suivant:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Personne</span> <span class="p">(</span><span class="n">id</span> <span class="nb">integer</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+          <span class="n">nom</span>    <span class="nb">varchar</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+          <span class="n">prenom</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+          <span class="n">adresse</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">70</span><span class="p">),</span>
+          <span class="n">dateNaissance</span> <span class="nb">date</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Cette table contient 300 000 enregistrements, stockés
+dans des blocs de taille 4 096 octets. Un enregistrement
+ne peut pas chevaucher deux blocs, et chaque bloc comprend
+un entête de 200 octets. On ignore l’entête des enregistrements.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donner la taille maximale et la taille minimale
+d’un enregistrement. On suppose par la suite
+que tous les enregistrements ont une taille maximale.</p></li>
+<li><p>Quel est  le nombre maximal d’enregistrements par bloc?</p></li>
+<li><p>Quelle  est la taille du fichier?</p></li>
+<li><p>Quel est le temps moyen de recherche d’un
+enregistrement si les blocs sont distribués au hasard sur le disque.</p></li>
+<li><p>On suppose que le fichier est trié sur le nom. Quel
+est le temps d’une recherche dichotomique pour chercher
+une personne avec un nom donné?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Taille minimale,: 4 + 1 + 1 + 0 (null) + 0 (null). Taille maximale:
+<span class="math notranslate nohighlight">\(4 + 41 + 41 + 71 + 8 = 165\)</span>.</p></li>
+<li><p>Espace disponible pour les enregistrements:
+4096 - 200 = 3896. Nombre max. d’enregistrements par
+bloc: <span class="math notranslate nohighlight">\(\lfloor 3\,896/165 \rfloor = 23\)</span></p></li>
+<li><p>Taille du fichier: <span class="math notranslate nohighlight">\(\lceil 300\,000 / 23 \rceil = 13\,044\)</span> blocs,
+soit <span class="math notranslate nohighlight">\(13\,044 \times 4\,096 = 53\)</span> Mo.</p></li>
+<li><p>Si les blocs sont distribués au hasard,  il
+faut 10 ms pour lire chaque bloc, et donc
+<span class="math notranslate nohighlight">\(13\,044 \times 10\)</span> ms, ou 130 secondes, soit plus de deux minutes!</p></li>
+<li><p>Avec une recherche par dichotomie, il faut
+<span class="math notranslate nohighlight">\(log_2(13\,044) = 13\)</span> lectures de blocs, soit
+130 ms au pire.</p></li>
+</ul>
+</div>
+</div>
+</section>
+<section id="atelier">
+<h2>Atelier<a class="headerlink" href="#atelier" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Cet atelier va proposer, tout au long des chapitres du cours, d’étudier le stockage
+et l’optimisation d’une même base de données.  Le schéma  suivant,
+ainsi que ses statistiques, seront utilisés dans l’ensemble des exercices du cours.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Cours (<strong>Id_Cours</strong>, Id_Enseignant, Intitule)</p></li>
+<li><p>Personne (<strong>Id_Personne</strong>, Nom, Prenom, Annee_Naissance)</p></li>
+<li><p>Salle (<strong>Id_Salle</strong>, Localisation, Capacite)</p></li>
+<li><p>Reservation (<strong>Id_Salle, Id_Cours, Date, heure_debut, heure_fin</strong>)</p></li>
+</ul>
+</div></blockquote>
+<p>Voici la taille des différents types :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Les identifiants (Id_…) et les nombres (ECTS, Capacite) sont codés sur 4 octets,</p></li>
+<li><p>les dates, années et heures sur 4 octets,</p></li>
+<li><p>Nom, Prenom, Intitule, Localisation sur 50 octets</p></li>
+</ul>
+</div></blockquote>
+<p>Et voici les statistiques sur le contenu de la base:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>2 200 tuples dans la table <em>Cours</em>,</p></li>
+<li><p>124 000 tuples <em>Personne</em> (Contenant enseignants et auditeurs),</p></li>
+<li><p>500 tuples <em>Salle</em> (Avec une capacite de 20 à 600),</p></li>
+<li><p>514 000 tuples <em>Reservation</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Le paramétrage du serveur de données est le suivant:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Taille d’une adresse : 10 octets</p></li>
+<li><p>Le <em>cache</em> comprend 11 blocs en mémoire centrale,</p></li>
+<li><p>Un bloc  fait 8 ko</p></li>
+<li><p>Un pourcentage d’espace libre (PCTFREE) de 10% est laissé dans chaque bloc</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">2. Dispositifs de stockage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-supports-de-stockage">S1: Supports de stockage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#memoires">Mémoires</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#performances-des-memoires">Performances des mémoires</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#disques">Disques</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#les-solid-state-drives">Les <em>Solid State Drives</em></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-gestion-des-memoires">S2: Gestion des mémoires</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#les-lectures">Les lectures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#les-mises-a-jour">Les mises à jour</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#le-principe-de-localite">Le principe de localité</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-enregistrements-blocs-et-fichiers">S3: Enregistrements, blocs et fichiers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#enregistrements">Enregistrements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#blocs">Blocs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fichiers">Fichiers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#atelier">Atelier</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="intro.html" title="1. Introduction"
+             >précédent</a> |
+          <a href="arbreb.html" title="3. Structures d’index: l’arbre B"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;2. &lt;/span&gt;Dispositifs de stockage</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

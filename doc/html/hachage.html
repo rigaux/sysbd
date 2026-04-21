@@ -1,0 +1,962 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>4. Structures d’index: le hachage &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="5. Moteurs de stockage" href="moteurs.html" />
+    <link rel="prev" title="3. Structures d’index: l’arbre B" href="arbreb.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;4. &lt;/span&gt;Structures d’index: le hachage</a></div>
+        <div class="rel">
+          <a href="arbreb.html" title="3. Structures d’index: l’arbre B"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="moteurs.html" title="5. Moteurs de stockage"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="structures-d-index-le-hachage">
+<span id="chap-hachage"></span><h1><span class="section-number">4. </span>Structures d’index: le hachage<a class="headerlink" href="#structures-d-index-le-hachage" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Les tables de hachage sont des structures très couramment utilisées
+en mémoire centrale pour organiser des ensembles et fournir
+un accès performant à ses éléments. Le hachage est également utilisé
+par les SGBD pour organiser de grandes collections de données sur mémoire
+persistante. Une technique intermédiaire, le <em>hachage hybride</em>, consiste
+à créer une seule structure de hachage dont les données sont partiellement
+en mémoire RAM et partiellement sur le disque. Le hachage hybride est
+notamment utilisé pour des algorithmes de jointures sophistiqués
+sur lesquels nous reviendrons.</p>
+<p>Dans ce chapitre nous étudions les structures de hachage utilisées pour indexer
+de grandes collections de données. La plus simple, le <em>hachage statique</em> ne fonctionne
+correctement que pour des collections de tailles fixes, ce qui exclut des tables
+évolutives (le cas le plus courant). Le <em>hachage dynamique</em>, qui s’adapte à la taille
+de la collection indexée, est présenté en section 2. Il repose sur un répertoire
+(<em>directory</em>) dont la taille peut croître au point de devenir un problème.
+Enfin la troisième section introduit
+le <em>hachage linéaire</em>, une structure qui apporte toute l’efficacité du hachage tout en maintenant
+une taille de répertoire réduite.</p>
+<section id="s1-le-hachage-statique">
+<h2>S1: le hachage statique<a class="headerlink" href="#s1-le-hachage-statique" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slhachage.pdf">Diapositives du hachage statique:</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263e2715e5e8g3jpn3/">Vidéo d’introduction au hachage</a></p></li>
+</ul>
+</div>
+<p>Nous commençons
+par rappeler les principes du hachage avant d’étudier
+les spécificités apportées par le stockage en mémoire secondaire.</p>
+<section id="principes-de-base">
+<h3>Principes de base<a class="headerlink" href="#principes-de-base" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’idée de base du hachage est d’organiser un ensemble
+d’éléments d’après une clé, et d’utiliser une fonction
+(dite <em>de hachage</em>) qui, pour chaque valeur de clé <span class="math notranslate nohighlight">\(c\)</span>,
+donne l’adresse <span class="math notranslate nohighlight">\(f(c)\)</span> d’un espace de stockage
+où l’élément doit être placé. En mémoire principale
+cet espace de stockage est en général une liste chaînée,
+et en mémoire secondaire séquence de blocs sur le disque
+que nous appellerons <em>fragment</em> (<em>bucket</em> en anglais).</p>
+<p>Prenons l’exemple de notre ensemble de films, et
+organisons-le avec une table de hachage sur le titre.
+Pour simplifier, on va supposer que chaque fragment
+contient un seul bloc avec une capacité d’au plus quatre
+films. L’ensemble des 16 films occupe donc
+au moins 4 blocs. Pour garder un peu de souplesse dans la répartition
+qui n’est pas toujours uniforme,
+on va affecter 5 fragments à la collection de films, et
+on numérote ces fragments de 0 à 4.</p>
+<p>Chaque fragment a une adresse, celle de son premier bloc. Il nous
+faut donc une structure qui associe le numéro du fragment à son
+adresse. Cette struture est le <em>répertoire</em> de la table de hachage.
+Le répertoire est un simple tableau à deux dimensions, avec les numéros
+dans une colonne et les adresses dans une autre. Le répertoire
+d’une structure de hachage est en principe très petit et doit tenir en mémoire RAM.</p>
+<p>Maintenant il faut définir la règle qui permet
+d’affecter un film à l’un des fragments. Cette règle prend
+la forme d’une fonction qui, appliquée à un titre, va
+donner en sortie un numéro de fragment. Cette fonction
+doit satisfaire les deux critères suivants:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le résultat de la fonction, pour n’importe quelle chaîne de caractères, doit être
+une adresse de fragment, soit pour notre exemple un entier compris entre 0 et 4;</p></li>
+<li><p>la distribution des résultats de la fonction doit être uniforme sur l’intervalle <span class="math notranslate nohighlight">\([0, 4]\)</span>;
+en d’autres termes les probabilités d’obtenir chacun des 5 chiffres pour une chaîne de caractères quelconque
+doivent être égales.</p></li>
+</ul>
+</div></blockquote>
+<p>Si le premier critère est relativement facile à satisfaire, le second
+soulève quelques problèmes car l’ensemble des chaînes de caractères
+auxquelles on applique une fonction de hachage possède souvent des
+propriétés statistiques spécifiques.  Dans notre exemple, l’ensemble
+des titres de film commencera souvent par « Le » ou « La » ce
+qui risque de perturber la bonne distribution du résultat si on ne
+tient pas compte de ce facteur. On sait définir des fonctions de hachage uniforme,
+à base d’un savant triturage de la représentation binaire de clés pour éliminer toute
+régularité. On va supposer ce point acquis: nos fonctions de hachage sont uniformes.</p>
+<p>Nous allons utiliser un principe simple pour notre exemple,
+en considérant la première lettre du titre, et en lui affectant
+son rang dans l’alphabet. Donc <em>a</em> vaudra 1, <em>b</em> vaudra <em>2</em>,
+<em>i</em> vaudra 9, etc. Ensuite, pour se ramener à une valeur entre
+0 et 4, on prendra simplement le reste de la division
+du rang de la lettre par 5 (« modulo 5 »).
+En résumé la fonction <span class="math notranslate nohighlight">\(h\)</span> est définie par:</p>
+<div class="math notranslate nohighlight">
+\[h(titre) = rang(titre[0])\, mod\, 5\]</div>
+<p>La <a class="reference internal" href="#hachage"><span class="std std-numref">Fig. 4.1</span></a> montre la table de hachage obtenue
+avec cette fonction. Tous les films commençant par
+<em>a</em>, <em>f</em>, <em>k</em>, <em>p</em>, <em>u</em> et <em>z</em> sont affectés au bloc 1 ce
+qui donne, pour notre ensemble de films, <em>Annie Hall</em>,
+<em>Psychose</em> et <em>Underground</em>. les
+lettres <em>b</em>, <em>g</em>, <em>l</em>, <em>q</em> et <em>v</em> sont affectées au bloc 2
+et ainsi de suite. Notez que la lettre <em>e</em> a pour rang 5
+et se trouve donc affectée au bloc 0.</p>
+<figure class="align-center" id="id3">
+<span id="hachage"></span><a class="reference internal image-reference" href="_images/hachage.png"><img alt="_images/hachage.png" src="_images/hachage.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.1 </span><span class="caption-text">Exemple d’une table de hachage</span><a class="headerlink" href="#id3" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La <a class="reference internal" href="#hachage"><span class="std std-numref">Fig. 4.1</span></a> présente, outre les cinq fragments <span class="math notranslate nohighlight">\(f_0, \cdots, f_4\)</span>  stockant
+des films, le répertoire à cinq <em>entrées</em> permettant d’associer une valeur
+entre 0 et 4 à l’adresse d’un fragment sur le disque. Ce répertoire
+fournit une indirection entre l’identification
+<em>logique</em> du bloc et son emplacement physique,
+selon un mécanisme déjà rencontré dans la partie du
+chapitre <a class="reference internal" href="stock.html#chap-stock"><span class="std std-ref">Dispositifs de stockage</span></a> consacrée aux techniques
+d’adressage de blocs. Comme déjà indiqué,
+on peut raisonnablement supposer que sa taille est faible et qu’il peut
+donc résider en mémoire principale, même pour de très grandes structures
+de hachage avec des milliers de fragments.</p>
+<p>On est assuré avec cette fonction d’obtenir toujours un chiffre
+entre 0 et 4, mais en revanche la distribution risque de
+ne pas être uniforme: si, comme on peut s’y attendre,
+beaucoup de titres commencent par la lettre <em>l</em>,
+le bloc 2 risque d’être surchargé. et l’espace initialement prévu
+s’avèrera insuffisant.</p>
+<p>Dans le pire des cas, une fonction de hachage mal conçue affecte tous
+les enregistrements à la même adresse, et la structure dégénère vers
+un simple fichier séquentiel (cas d’une fonction renvoyant toujours à par exemple).
+Il faudrait utiliser un calcul beaucoup
+moins sensible à ce genre de biais; prendre
+par exemple les 4 ou 8 premiers
+caractères de la chaînes, traiter ces caractères commes
+des entiers dont on effectue la somme, définir
+la fonction sur le résultat de cette somme.</p>
+</section>
+<section id="recherche-dans-une-table-de-hachage">
+<h3>Recherche dans une table de hachage<a class="headerlink" href="#recherche-dans-une-table-de-hachage" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La structure de hachage permet les recherches par titre. Reprenons notre exemple favori:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Impitoyable&#39;</span>
+</pre></div>
+</div>
+<p>Pour évaluer cette requête, il suffit d’appliquer la fonction de
+hachage à la première lettre du titre, <em>i</em>, qui a pour rang 9. Le
+reste de la division de 9 par 5 est 4, et on peut donc charger le fragment
+4 et y trouver le film <em>Impitoyable</em>. On a donc pu effectuer cette
+recherche en lisant un seul bloc, ce qui est optimal. Cet exemple
+résume les deux avantages principaux d’une table de hachage:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>La structure n’occupe aucun espace disque additionnel aux données elles-mêmes, contrairement
+à l’arbre-B;</p></li>
+<li><p>elle permet d’effectuer les recherches par clé par accès
+direct (calculé) au fragment susceptible de contenir les enregistrements.</p></li>
+</ul>
+</div></blockquote>
+<p>Sauf exception (ici la recherche par la première lettre du titre), la
+recherche par préfixe n’est plus possible.
+La hachage ne permet pas non plus d’optimiser les recherches par intervalle,
+puisque l’organisation des enregistrements ne s’appuie pas sur l’ordre
+des clés.  La requête suivante par exemple ne peut être résolule que par le parcours de tous les
+blocs de la structure, même si trois films seulement sont
+concernés.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>  <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="n">betseen</span> <span class="s1">&#39;Annie Hall&#39;</span> <span class="k">and</span> <span class="s1">&#39;Easy Rider&#39;</span>
+</pre></div>
+</div>
+<p>Cette incapacité à effectuer efficacement des recherches
+par intervalle doit mener à préférer l’arbre-B dans tous les
+cas où ce type de recherche est envisgeable.
+Si la clé est par exemple une date, il est probable que des
+recherches seront effectuées sur un intervalle de temps, et
+l’utilisation du hachage peut s’avérer un mauvais choix. Mais dans le
+cas, fréquent, où on utilise une clé séquentielle pour identifier
+les enregistrements pas un numéro  indépendant de leurs
+attributs, le hachage est tout à fait approprié car une recherche par
+intervalle ne présente alors pas de sens et tous les accès se feront
+par la clé.</p>
+</section>
+<section id="mises-a-jour">
+<h3>Mises à jour<a class="headerlink" href="#mises-a-jour" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Si le hachage peut offrir des performances sans équivalent
+pour les recherches par clé, il est – du moins
+dans la version simple que nous présentons pour l’instant –
+mal adapté aux mises à jour. Prenons tout d’abord le cas
+des insertions: comme on a évalué au départ la taille
+de la table pour déterminer le nombre de blocs nécessaire,
+cet espace initial risque de ne plus être suffisant quand
+des insertions conduisent à dépasser la taille
+estimée initialement. La seule solution est alors de chaîner de
+nouveaux fragments.</p>
+<p>Cette situation est illustrée dans la figure <a class="reference internal" href="#hachage2"><span class="std std-numref">Fig. 4.2</span></a>.
+On a inséré un nouveau film, <em>Citizen Kane</em>. La valeur donnée
+par la fonction de hachage est 3, rang de la lettre “c”
+dans l’alphabet, mais le bloc 3 est déjà plein.</p>
+<figure class="align-center" id="id4">
+<span id="hachage2"></span><a class="reference internal image-reference" href="_images/hachage2.png"><img alt="_images/hachage2.png" src="_images/hachage2.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.2 </span><span class="caption-text">Table de hachage avec page de débordement</span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Il est impératif pourtant de stocker le film dans l’espace
+associé à la valeur 3 car c’est là que les recherches iront s’effectuer.
+On doit alors chaîner un nouveau fragment au fragment 3 et y stocker
+le nouveau film.  À une entrée dans le répertoire, correspondant
+à l’adresse logique 3, sont associés maintenant deux fragments physiques,
+avec une dégradation potentielle des performances puisqu’il faudra,
+lors d’une recherche, suivre le chaînage et inspecter tous les
+enregistrements pour lesquels la fonction de hachage donne la valeur
+3.</p>
+<p>Il est très important de noter qu’il est impossible, avec les principes
+exposés ci-dessus, de modifier la structure de hachage en ajoutant des fragments et
+en modifiant le répertoire. Cela impliquerait en effet la modification de la
+fonction de hachage elle-même. On aurait donc une différence entre
+la fonction utilisée pour le stockage et celle utilisée pour la recherche.</p>
+<p>Supposez que l’on ajoute un fragment, la fontion de hachage devient <span class="math notranslate nohighlight">\(modulo(rang, 6)\)</span>. La
+recherche du film “Impitoyable” avec cette fonction nous dirigerait vers le fragment 3
+et on ne trouverait pas le film.
+Toute modification de la fonction de hachage rend la
+structure obsolète, et il faut la reconstruire entièrement.</p>
+<p>Autrement dit, ce type de hachage n’est pas
+<em>dynamique</em> et ne permet pas, d’une part d’évoluer parallèlement à
+la croissance ou décroissance des données, d’autre part de s’adapter
+aux déviations statistiques par rapport à la normale. Il faudrait reconstruire
+périodiquement la structure en fonction de son évolution. C’est un défaut majeur
+par rapport à la réorganisation dynamique de l’arbre B.</p>
+<p>En résumé, les avantages et inconvénients du hachage
+statique, comparé
+à l’arbre-B, sont les suivantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Avantages</strong>,: (1) recherche par accès direct, en temps constant; (2) n’occupe pas d’espace disque.</p></li>
+<li><p><strong>Inconvénients</strong>: (1) pas de recherche par intervalle;           (2) pas de dynamicité.</p></li>
+</ul>
+</div></blockquote>
+<p>Il n’est pas inutile de rappeler qu’en pratique la
+hauteur d’un arbre B est de l’ordre de 2 ou 3 niveaux, ce
+qui relativise l’avantage du hachage. Une recherche avec le hachage
+demande une lecture, et 2 ou 3 avec l’arbre B, ce qui n’est
+pas vraiment significatif, surtout quand l’arbre B réside en mémoire RAM.
+Cette considération explique que l’arbre B, plus
+généraliste et presque aussi efficace, soit employé
+par défaut pour l’indexation dans tous les SGBD relationnels.</p>
+<p>Enfin signalons que le hachage est une structure <em>plaçante</em>,
+et qu’on ne peut donc créer qu’une seule table de hachage
+pour un ensemble de données, les autres index étant
+obligatoirement des arbres B.</p>
+<p>Il existe  des techniques plus avancées
+de hachage dit <em>dynamique</em>
+qui permettent d’obtenir une structure plus évolutive.
+La caractéristique comune de ces méthodes est d’adapter
+le nombre d’entrées dans la table de hachage
+de manière à ce que le nombre de blocs corresponde
+approximativement à la taille nécessaire pour stocker
+l’ensemble des enregistrements. On doit se retrouver alors
+dans une situation où il n’y a qu’un bloc par entrée
+en moyenne, ce qui garantit qu’on peut toujours
+accéder aux enregistrements avec une seule lecture.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>À quoi sert le <em>répertoire</em> de la structure de hachage?</p>
+<div class="reauthoring_embedded_quiz" id="hach1-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> À stocker les enregistrements d’après leur clé <em>c</em></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> À stocker l’adresse des fragments d’après la valeur de  <span class="math notranslate nohighlight">\(h(c)\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> À stocker l’adresse des enregistrements d’après la valeur de  <span class="math notranslate nohighlight">\(h(c)\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Pourquoi la fonction de hachage doit-elle être uniforme?</p>
+<div class="reauthoring_embedded_quiz" id="hach1-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Parce que les enregistrements doivent être répartis uniformément
+dans les fragments.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce que chaque fragment doit contenir au moins un enregistrement</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce que deux appels successifs à la fonction doivent toujours donner
+le même résultat.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Ma clé primaire est un idenfifiant séquentiel. Que peut-on dire du stockage
+de deux enregistrements dont les clés sont consécutives?</p>
+<div class="reauthoring_embedded_quiz" id="hach1-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Ils sont dans le même fragment, ou au pire dans deux fragments adjacents.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Ils sont forcément dans deux fragments distincts</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Les emplacements des enregistrements sont complètement indépendants.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est, dans le pire des cas, le coût d’une recherche par clé dans une structure de hachage statique?</p>
+<div class="reauthoring_embedded_quiz" id="hach1-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Dans tous les cas une lecture séquentielle suffit.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Dans le pire des cas tous les fragments sont chaînés et
+le coût est identique au parcours du fichier</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Au pire il faut deux lectures séquentielles, une pour le
+fragment principal, l’autre pour le fragment chaîné.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-hachage-extensible">
+<h2>S2: Hachage extensible<a class="headerlink" href="#s2-hachage-extensible" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slhachageext.pdf">Diapositives du hachage extensible:</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263e2715ecdnjn7ag1/">Vidéo sur le hachage extensible</a></p></li>
+</ul>
+</div>
+<p>Nous présentons tout d’abord le hachage extensible sur
+un exemple avant d’en donner une description plus générale.
+Dans un premier temps, la structure est tout à fait identique
+à celle que nous avons vue précédemment, à ceci près que
+le nombre d’entrées dans le répertoire est variable,
+et toujours égal à une puissance de 2.</p>
+<p>Maintenant nous supposons donnée une fonction de hachage
+<span class="math notranslate nohighlight">\(h(c)\)</span> qui s’applique à une valeur de clé <em>c</em>
+et dont le résultat est toujours un entier sur 4 octets,
+soit 32 bits. Cette fonction est immuable.
+Le tableau suivant donne les valeurs  obtenues par application de
+cette fonction aux titres de nos films.</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Titre</p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(h(titre)\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Vertigo</p></td>
+<td><p>01110010</p></td>
+</tr>
+<tr class="row-odd"><td><p>Brazil</p></td>
+<td><p>1010010</p></td>
+</tr>
+<tr class="row-even"><td><p>Twin Peaks</p></td>
+<td><p>11001011</p></td>
+</tr>
+<tr class="row-odd"><td><p>Underground</p></td>
+<td><p>01001001</p></td>
+</tr>
+<tr class="row-even"><td><p>Easy Rider</p></td>
+<td><p>00100110</p></td>
+</tr>
+<tr class="row-odd"><td><p>Psychose</p></td>
+<td><p>01110011</p></td>
+</tr>
+<tr class="row-even"><td><p>Greystoke</p></td>
+<td><p>10111001</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shining</p></td>
+<td><p>11010011</p></td>
+</tr>
+</tbody>
+</table>
+<p>Comme il n’y a que deux entrées, nous nous
+intéressons seulement au premier de ces 32 bits, qui peut valoir
+0 ou 1. La figure <a class="reference internal" href="#hashext2"><span class="std std-numref">Fig. 4.3</span></a> montre l’insertion
+des cinq premiers films de notre liste, et leur
+affectation à l’un des deux blocs. Le film
+<em>Vertigo</em> par exemple a pour valeur de hachage 01110010
+qui commence par 0, et se trouve donc affecté à
+la première entrée.</p>
+<figure class="align-center" id="id5">
+<span id="hashext2"></span><a class="reference internal image-reference" href="_images/hachext2.png"><img alt="_images/hachext2.png" src="_images/hachext2.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.3 </span><span class="caption-text">Hachage extensible avec 2 entrées</span><a class="headerlink" href="#id5" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Supposons, pour la clarté de l’exposé, que l’on ne puisse placer que 3
+enregistrements dans un fragment. Alors l’insertion de <em>Psychose</em>, avec
+pour valeur de hachage 01110011, entraine le débordement du fragment
+associé à l’entrée 0.</p>
+<p>On va alors doubler la taille du répertoire pour la faire passer à
+quatre entrées, avec pour valeurs respectives 00, 01, 10, 11,
+soit les <span class="math notranslate nohighlight">\(2^2\)</span> combinaisons possibles de 0 et de 1 sur deux bits.
+Ce doublement de taille du répertoire entraine la réorganisation
+suivante (<a class="reference internal" href="#hashext3"><span class="std std-numref">Fig. 4.4</span></a>):</p>
+<figure class="align-center" id="id6">
+<span id="hashext3"></span><a class="reference internal image-reference" href="_images/hachext3.png"><img alt="_images/hachext3.png" src="_images/hachext3.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.4 </span><span class="caption-text">Doublement du répertoire dans le hachage extensible</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>En détail:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>les films de l’ancien fragment 0 sont répartis
+sur les fragments 00 et 01 en fonction de la valeur
+de leurs deux premiers bits: <em>Easy Rider</em>
+dont la valeur de hachage commence par 00 est placé
+dans le premier fragment, tandis que <em>Vertigo</em>,
+<em>Underground</em> et <em>Psychose</em>, dont les valeurs de hachage commencent par 01,
+sont placées dans le second fragment.</p></li>
+<li><p>les films de l’ancien fragment 1 n’ont pas de raison d’être
+répartis  puisqu’il n’y a pas
+eu de débordement pour cette valeur,: <em>on
+va donc associer le même fragment aux deux entrées 10 et 11</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Maintenant on insère <em>Greystoke</em> (valeur 10111001)
+et <em>Shining</em> (valeur) 11010011. Tous deux commencent
+par 10 et doivent donc être placés dans le troisième
+fragment qui déborde alors. Ici il n’est cependant pas nécessaire
+de doubler le répertoire puisqu’on est dans une situation
+où plusieurs entrées de ce répertoire pointent
+sur le même fragment.</p>
+<p>On va donc allouer un nouveau fragment à la structure, et
+l’associer à l’entrée 11, l’ancien fragment restant associé
+à la seule entrée 10. Les films sont répartis dans les deux fragments, <em>Brazil</em>
+et <em>Greystoke</em> avec l’entrée 10,
+<em>Twin Peaks</em> et <em>Shining</em> avec l’entrée 11
+(<a class="reference internal" href="#hashext4"><span class="std std-numref">Fig. 4.5</span></a>).</p>
+<figure class="align-center" id="id7">
+<span id="hashext4"></span><a class="reference internal image-reference" href="_images/hachext4.png"><img alt="_images/hachext4.png" src="_images/hachext4.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.5 </span><span class="caption-text">Jeu de pointeurs pour éviter de doubler le répertoire</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>En résumé, il n’y a que deux cas</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Cas 1</strong>: on insère dans un fragment plein, mais plusieurs
+entrées pointent dessus. On alloue alors
+un nouveau fragment, et on répartit les adresses du répertoire pour référencer
+les deux fragments.</p></li>
+<li><p><strong>Cas 2</strong>:  on insère dans un fragment plein, associé à une seule entrée.
+On double à nouveau le nombre d’entrées</p></li>
+</ul>
+</div></blockquote>
+<p>La technique est simple et résout en partir le principal
+défaut du hachage, l’absence de dynamicité. L’inconvénient potentiel est que
+le répertoire tend à croître de manière exponentielle, ce qui peut soulever un problème
+à terme. Le hachage extensible reste par ailleurs
+une structure plaçante qui doit être complétée par l’arbre B pour
+des index secondaires.</p>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Qu’est-ce qui caractérise le hachage extensible?</p>
+<div class="reauthoring_embedded_quiz" id="hach2-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Les fragments sont de taille variable</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le répertoire est de taille variable</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La fonction  de hachage change régulièrement</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On ajoute des fonctions quand la collection grandit</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelle est la taille maximale du répertoire</p>
+<div class="reauthoring_embedded_quiz" id="hach2-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(2^4\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(2 \times 4\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(2^{32}\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(2 \times 32\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Combien ajoute-t-on de fragments quand l’un deux déborde</p>
+<div class="reauthoring_embedded_quiz" id="hach2-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  un seul</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Deux</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(p\)</span> où <em>p</em> est le nombre d’entrée courant dans le répertoire.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Autant que d’enregistrements en trop</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Combien d’entrées du répertoire peuvent référencer le même fragment?</p>
+<div class="reauthoring_embedded_quiz" id="hach2-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  une seule</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Deux</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Autant que nécessaire</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s3-hachage-lineaire">
+<h2>S3: hachage linéaire<a class="headerlink" href="#s3-hachage-lineaire" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slhachagelin.pdf">Diapositives du hachage linéaire:</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263e2715f35sf4x509/">Vidéo de présentation</a></p></li>
+</ul>
+</div>
+<p>Le but du hachage linéaire est de maintenir une structure de hachage efficace
+quand le jeu de données est très dynamique, et en particulier quand il croît
+très rapidement. Cette maintenance implique une extension progressive du répertoire
+de hachage et de la fonction de hachage, ainsi que l’ajout de nouveaux fragments.
+L’apport du hachage linéaire est d’incrémenter
+à la fois le répertoire et les fragments <em>proportionnellement</em> aux besoins
+de stockage, et d’éviter le doublement systématique du répertoire.</p>
+<p>Le point de départ du hachage linéaire est identique à celui
+du hachage extensible. Nous supposons donnée une fonction de hachage
+<span class="math notranslate nohighlight">\(h(c)\)</span> qui s’applique à une valeur de clé <em>c</em>
+et dont le résultat est toujours un entier sur 4 octets,
+soit 32 bits. Le tableau suivant donne les valeurs
+que nous allons utiliser pour illustrer
+le hachage linéaire sur quelques-uns de nos films.</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Titre</p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(h(titre)\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Vertigo</p></td>
+<td><p>14</p></td>
+</tr>
+<tr class="row-odd"><td><p>Brazil</p></td>
+<td><p>43</p></td>
+</tr>
+<tr class="row-even"><td><p>Twin Peaks</p></td>
+<td><p>25</p></td>
+</tr>
+<tr class="row-odd"><td><p>Underground</p></td>
+<td><p>20</p></td>
+</tr>
+<tr class="row-even"><td><p>Easy Rider</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>Psychose</p></td>
+<td><p>33</p></td>
+</tr>
+<tr class="row-even"><td><p>Greystoke</p></td>
+<td><p>17</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shining</p></td>
+<td><p>16</p></td>
+</tr>
+<tr class="row-even"><td><p>Citizen Kane</p></td>
+<td><p>44</p></td>
+</tr>
+</tbody>
+</table>
+<p>La structure est celle d’une table de hachage classique, avec un
+répertoire dont chaque entrée référence un fragment. Nous prenons
+comme point de départ la situation de la <a class="reference internal" href="#hachagelineaire1"><span class="std std-numref">Fig. 4.6</span></a>
+qui ressemble en tous points à celle du hachage extensible, à
+une (petite) exception près:
+un paramètre spécial, <em>l’indice de partitionnement</em> est ajouté à la structure.
+Appelons-le <em>p</em>. Sa valeur initiale est 0.</p>
+<figure class="align-center" id="id8">
+<span id="hachagelineaire1"></span><a class="reference internal image-reference" href="_images/hachageLineaire1.png"><img alt="_images/hachageLineaire1.png" src="_images/hachageLineaire1.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.6 </span><span class="caption-text">Structure initiale pour le hachage linéaire.</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La fonction de hachage utilisée pour la structure de la  <a class="reference internal" href="#hachagelineaire1"><span class="std std-numref">Fig. 4.6</span></a>
+est <span class="math notranslate nohighlight">\(h(c) \, mod\ 2\)</span>, que nous noterons <span class="math notranslate nohighlight">\(h_1\)</span>. Plus généralement,
+on va considérer la suite de  fonctions <span class="math notranslate nohighlight">\(h_0, h_1, h_2, \cdots\)</span>
+définie par</p>
+<div class="math notranslate nohighlight">
+\[h_i (c)  = h(c)\, mod\, 2^i\]</div>
+<p>En français: le résultat de <span class="math notranslate nohighlight">\(h_i(c)\)</span> est le reste de la division de <span class="math notranslate nohighlight">\(c\)</span>
+par <span class="math notranslate nohighlight">\(2^i\)</span>.</p>
+<p>Quand un fragment <span class="math notranslate nohighlight">\(f_i\)</span> déborde, les actions suivantes sont
+effectuées.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Un bloc de débordement est chaîné à <span class="math notranslate nohighlight">\(f_i\)</span>  pour stocker le nouvel enregistrement.</p></li>
+<li><p>Le fragment <span class="math notranslate nohighlight">\(f_p\)</span>  est éclaté en (<span class="math notranslate nohighlight">\(f_p\)</span>, <span class="math notranslate nohighlight">\(f'_p\)</span>),
+son contenu réparti dans les deux nouveaux
+fragments (<span class="math notranslate nohighlight">\(f_p\)</span>, <span class="math notranslate nohighlight">\(f'_p\)</span>), et <em>p</em> est incrémenté de 1.</p></li>
+</ul>
+</div></blockquote>
+<p>Regardons ce qui se passe après insertion de Psychose, puis de Easy Rider.
+Tous les deux ont des valeurs impaires pour <span class="math notranslate nohighlight">\(h(c)\)</span> et sont donc
+placés dans le fragment <span class="math notranslate nohighlight">\(f_1\)</span>  qui déborde. Parallèlement
+à ce débordement, le fragment <span class="math notranslate nohighlight">\(f_0\)</span> est éclaté et son contenu réparti
+entre <span class="math notranslate nohighlight">\(f_0\)</span>  et un nouveau
+fragment <span class="math notranslate nohighlight">\(f_2\)</span>,
+comme le montre la <a class="reference internal" href="#hachagelineaire1"><span class="std std-numref">Fig. 4.6</span></a>.</p>
+<figure class="align-center" id="id9">
+<span id="hachagelineaire2"></span><a class="reference internal image-reference" href="_images/hachageLineaire2.png"><img alt="_images/hachageLineaire2.png" src="_images/hachageLineaire2.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.7 </span><span class="caption-text">Après débordement de <span class="math notranslate nohighlight">\(f_1\)</span> et éclatement de <span class="math notranslate nohighlight">\(f_0\)</span></span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>En éclatant le fragment <span class="math notranslate nohighlight">\(f_0\)</span>, on a utilisé comme fonction
+de répartition le successeur de <span class="math notranslate nohighlight">\(h_1\)</span>, <span class="math notranslate nohighlight">\(h_2\)</span>, et pris donc
+en compte le reste de la division par <span class="math notranslate nohighlight">\(2^2=4\)</span>. <em>Underground</em>
+et <em>Easy Rider</em>, dont les valeurs respectives de <span class="math notranslate nohighlight">\(h(c)\)</span>
+sont 24 et 8, restent donc dans <span class="math notranslate nohighlight">\(f_0\)</span>, tandis
+que Vertigo (valeur 14, avec pour reste de la division 2) est déplacé dans <span class="math notranslate nohighlight">\(f_2\)</span>.</p>
+<p>À ce stade, on constate donc que <em>deux fonctions de hachage cohabitent</em>:
+<span class="math notranslate nohighlight">\(h_1\)</span> et <span class="math notranslate nohighlight">\(h_2\)</span>. Comment savoir laquelle utiliser? Le critère
+est simplement déterminé par le paramètre <em>p</em>. Le
+hachage linéaire repose toujours sur une paire de
+fonctions <span class="math notranslate nohighlight">\((h_n, h_{n+1})\)</span>.
+Initiallement, cette paire est <span class="math notranslate nohighlight">\((h_0, h_1)\)</span>,
+et comme <em>p=0</em>,  <span class="math notranslate nohighlight">\(h_0\)</span> s’applique
+à tous les fragments. Au fur et à mesure
+de l’évolution de la structure suite à des éclatements, <em>p</em>
+est incrémenté et <span class="math notranslate nohighlight">\(h_0\)</span> s’applique seulement aux fragments
+dont l’indice est supérieur ou égal à <em>p</em>, et <span class="math notranslate nohighlight">\(h_1\)</span>
+à tous les autres.</p>
+<p>Continuons notre exemple en insérant successivement Shining (valeur 16)
+puis Citizen Kane  (valeur 48). Tous deux vont dans <span class="math notranslate nohighlight">\(f_0\)</span> qui déborde.
+Il faut donc éclater le fragment désigné par la valeur courante de <em>p</em>,
+<span class="math notranslate nohighlight">\(f_1\)</span>, et incrémenter <em>p</em>. On se retrouve dans la situation
+de la <a class="reference internal" href="#hachagelineaire3"><span class="std std-numref">Fig. 4.8</span></a>.</p>
+<figure class="align-center" id="id10">
+<span id="hachagelineaire3"></span><a class="reference internal image-reference" href="_images/hachageLineaire3.png"><img alt="_images/hachageLineaire3.png" src="_images/hachageLineaire3.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.8 </span><span class="caption-text">Après débordement de <span class="math notranslate nohighlight">\(f_0\)</span> et éclatement de <span class="math notranslate nohighlight">\(f_1\)</span></span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Que constate-t-on? La structure a un nouveau bloc de débordement, mais celui
+de <span class="math notranslate nohighlight">\(f_1\)</span> a disparu. Pourquoi? Parce qu’en incrémentant <em>p</em>, la fonction
+<span class="math notranslate nohighlight">\(h_1\)</span> s’applique maintenant à <span class="math notranslate nohighlight">\(f_1\)</span>, ce qui conduit à répartir
+les enregistrements initialement présents soit dans <span class="math notranslate nohighlight">\(f_1\)</span> (si le modulo
+4 de la clé est 1) ou le nouveau fragment <span class="math notranslate nohighlight">\(f_3\)</span>  (si le modulo 4 et 3).</p>
+<p>Résumons. Dans la structure de hachage linéaire, quand un fragment déborde,
+un nouveau fragment est chaîné. On se retrouve dans la situation
+du hachage statique, le chaînage introduisant une indirection
+pénalisante pour les recherches. Si on s’en tenait là il n’y aurait
+aucun progrès. Mais le hachage linéaire va plus loin en incrémentant
+également le nombre de valeurs de hachage et effectuant un éclatement
+de l’un des fragments de la structure, <em>mais pas forcément de celui qui vient
+de déborder</em>. En fait, le débordement d’un fragment
+agit comme une sorte de signal que la structure doit évoluer et s’agrandir,
+et on le fait mais dans un ordre déterminé à l’avance. <em>C’est ce découplage entre la constatation d’un débordement
+d’un côté, et l’éclatement d’un fragment de l’autre</em>, qui constitue l’idée
+- brillante - fondant l’organisation du hachage linéaire.</p>
+<p>On accepte donc d’avoir des blocs de débordement, mais uniquement
+de manière temporaire, car, à terme, le fragment qui a débordé et consiste en
+plusieurs blocs chaînés sera éclaté à son tour, et le chaînage disparaitra.
+On peut interpréter le principe comme étant celui d’une désynchronisation entre
+la croissance des données et le nécessaire éclatement des fragments.</p>
+<p>On peut noter également qu’après cet éclatement, <span class="math notranslate nohighlight">\(h_0\)</span> n’est plus utilisé.
+La paire de fonction requises pour la structure devient  <span class="math notranslate nohighlight">\((h_1, h_2)\)</span>
+et <em>p</em> est réinitialisé à 0: on va recommencer une séquence
+d’éclatement des fragments, en partant de 0, dans l’ordre.
+Toutes les puissances de 2, on « décale » d’un niveau la paire de fonction
+de hachage, et on dispose de toutes les informations nécessaires pour gérer les
+insertions et les recherches. Le petit code suivant est à la base de l’identification
+du fragment contenant un enregistrement de clé <em>c</em>, la
+paire courante de fonctions étant <span class="math notranslate nohighlight">\((h_n, h_{n+1})\)</span>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">$a</span> :<span class="o">=</span> h_n<span class="o">(</span>h<span class="o">(</span>c<span class="o">))</span><span class="p">;</span>
+<span class="k">if</span> <span class="o">(</span><span class="nv">$a</span> &lt; <span class="nv">$p</span><span class="o">)</span>  <span class="nv">$a</span> :<span class="o">=</span> h_<span class="o">{</span>n+1<span class="o">}(</span>h<span class="o">(</span>c<span class="o">))</span>
+</pre></div>
+</div>
+<p>En clair: on applique d’abord <span class="math notranslate nohighlight">\(h_n\)</span>, en supposant que le fragment
+concerné n’a pas encore éclaté. On obtient une valeur de hachage <em>a</em>. Si <em>a</em>
+est inférieure à <em>p</em>, c’est :math:` h_{n+1}` qu’il faut utiliser.</p>
+<section id="id2">
+<h3>Quiz<a class="headerlink" href="#id2" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Quelle affirmation est vraie pour le hachage linéaire?</p>
+<div class="reauthoring_embedded_quiz" id="hach3-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Il n’y a jamais besoin de chaîner des fragments en cas de débordement</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est toujours le même fragment qui éclate</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’éclatement des fragments suit un ordre indépendant des insertions</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Comment sait-on quelle fonction de hachage s’applique à une clé?</p>
+<div class="reauthoring_embedded_quiz" id="hach3-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> C’est déterminé en fonction de <em>p</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le milieu du répertoire constitue la frontière</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> C’est déterminé par la valeur de la clé</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Pourquoi accepte-t-on de faire des chaînages dans le hachage linéaire?</p>
+<div class="reauthoring_embedded_quiz" id="hach3-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Parce qu’ils sont inévitables</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Parce qu’ils sont temporaires et vont disparaître à l’occasion
+d’un futur éclatement</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce qu’ils n’entraînent pas de problème de performance dans
+le cas du hachage linéaire.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-hach1-construction-d-un-hachage-statique admonition" id="ex-hach1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-hach1">ex-hach1</a>: construction d’un hachage statique</p>
+<blockquote>
+<div><p>Reprenons une  liste de 12 départements, à lire de gauche à droite
+et de bas en haut.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>3  Allier; 36 Indre; 18 Cher; 75 Paris
+39 Jura; 9  Ariège; 81 Tarn; 11 Aude
+12 Aveyron; 25 Doubs; 73 Savoie; 55 Meuse;
+</pre></div>
+</div>
+<p>La clé étant le numéro de département et on suppose qu’un bloc contient 5 enregistrements.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Proposez une fonction de hachage et le nombre d’entrées du répertoire,
+puis construisez une structure de hachage statique
+en prenant les enregistrements dans l’ordre indiqué.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><p>Il y a 12 départements, donc à priori on peut se contenter de 3 pages
+et il reste un peu de place. Pour la fonction de hachage,
+on prend simplement <span class="math notranslate nohighlight">\(c\mod 3\)</span> où <em>c</em> est le code du département.</p>
+</div></blockquote>
+<p>La table de hachage est donnée par la  <a class="reference internal" href="#hachex1"><span class="std std-numref">Fig. 4.9</span></a>. On constate un fort
+déséquilibre et une page de débordement, dues à la répartition
+non uniforme des numéros de département dans notre échantillon.</p>
+<figure class="align-center" id="id11">
+<span id="hachex1"></span><a class="reference internal image-reference" href="_images/hachEx1.png"><img alt="_images/hachEx1.png" src="_images/hachEx1.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.9 </span><span class="caption-text">Le hachage statique, montrant une répartition non uniforme des enregistrements</span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="admonition-exercice-ex-hach2-avec-hachage-extensible admonition" id="ex-hach2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-hach2">ex-hach2</a>: avec hachage extensible</p>
+<blockquote>
+<div><p>Même exercice, mais avec une structure basée sur le hachage extensible. La fonction
+de hachage est la suivante:  <span class="math notranslate nohighlight">\(h(nom) = i_1 i_2 \cdots i_4\)</span>
+avec <span class="math notranslate nohighlight">\(i_j = 1\)</span> si la lettre <span class="math notranslate nohighlight">\(nom[i_j]\)</span> est en position impaire
+dans l’alphabet, et 0 sinon. Donc <span class="math notranslate nohighlight">\(f(Aude)=1101\)</span>. Voici la
+liste des valeurs de hachage, en ne prenant que les 4 premiers bits.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Allier  1001    Indre   1000    Cher    1010    Paris   0101
+Jura    0101    Ariège  1011    Tarn    0100    Aude    1101
+Aveyron 1011    Doubs   0110    Savoie  1101    Meuse   1111
+</pre></div>
+</div>
+<ul>
+<li><p>On suppose toujours 5 enregistrements par bloc. Choisissez
+le nombre de bits initial de la structure de hachage en fonction
+du nombre de départements à indexer, et donnez la structure obtenue.</p></li>
+<li><p>Prenez les départements suivants, dans l’ordre indiqué
+(de gauche à droite, puis de haut en bas) et donnez les évolutions
+de la structure de hachage extensible.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Cantal  1100    Marne   1100    Loire   0110    Landes  0100
+Calvados 1110   Gard    1110    Vaucluse 0111   Ardèche 0011
+</pre></div>
+</div>
+</li>
+</ul>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il y a 12 enregistrements, il faut au moins 3 blocs donc
+on va prendre en compte les deux premiers bits, avec quatre
+valeurs possibles et 4 blocs.</p>
+<p>La structure est donnée dans la <a class="reference internal" href="#hachexo2"><span class="std std-numref">Fig. 4.10</span></a>. Notre fonction
+n’est toujours pas uniforme et aucun département n’est placé
+dans <span class="math notranslate nohighlight">\(f_0\)</span> (cela viendrait sûrement).</p>
+<figure class="align-center" id="id12">
+<span id="hachexo2"></span><a class="reference internal image-reference" href="_images/hachExo2.png"><img alt="_images/hachExo2.png" src="_images/hachExo2.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.10 </span><span class="caption-text">Situation initiale du hachage extensible, en prenant 2 bits pour 12 départements</span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Continuons les insertions comme indiqué dans l’énoncé. Le Cantal
+et la Marne vont tous les deux dans le fragment <span class="math notranslate nohighlight">\(f_{11}\)</span>,
+la Loire et les Landes dans le bloc <span class="math notranslate nohighlight">\(f_{01}\)</span> qui déborde alors.</p>
+<p>Il faut éclater <span class="math notranslate nohighlight">\(f_{01}\)</span> en <span class="math notranslate nohighlight">\(f_{010}\)</span> et <span class="math notranslate nohighlight">\(f_{011}\)</span>.
+Il n’est réféerencé que par une seule
+entrée dans le répertoire, il faut donc doubler la taille
+de ce dernier. Tous les autres fragments sont alors référencés
+par 2 entrées (<a class="reference internal" href="#hachexo2-2"><span class="std std-numref">Fig. 4.11</span></a>).</p>
+<figure class="align-center" id="id13">
+<span id="hachexo2-2"></span><a class="reference internal image-reference" href="_images/hachExo2-2.png"><img alt="_images/hachExo2-2.png" src="_images/hachExo2-2.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.11 </span><span class="caption-text">Après éclatement de <span class="math notranslate nohighlight">\(f_{01}\)</span></span><a class="headerlink" href="#id13" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Insérons maintenant le Calvados. Cette fois c’est <span class="math notranslate nohighlight">\(f_{110}\)</span>
+qui est plein et doit être éclaté entre <span class="math notranslate nohighlight">\(f_{110}\)</span>
+et <span class="math notranslate nohighlight">\(f_{111}\)</span>. Comme <span class="math notranslate nohighlight">\(f_{110}\)</span> était référencé
+par deux entrées, il est inutile de doubler le répertoire.
+la <a class="reference internal" href="#hachexo2-3"><span class="std std-numref">Fig. 4.12</span></a> montre la structure finale.</p>
+<figure class="align-center" id="id14">
+<span id="hachexo2-3"></span><a class="reference internal image-reference" href="_images/hachExo2-3.png"><img alt="_images/hachExo2-3.png" src="_images/hachExo2-3.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.12 </span><span class="caption-text">Situation finale</span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="admonition-exercice-ex-hach3-un-peu-de-hachage-lineaire admonition" id="ex-hach3">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-hach3">ex-hach3</a>: un peu de hachage linéaire</p>
+<blockquote>
+<div><p>Expliquez l’évolution du hachage linéaiere en
+partant de la <a class="reference internal" href="#hachagelineaire3"><span class="std std-numref">Fig. 4.8</span></a> et en insérant deux films,
+Metropolis donc le code de hachage est 49, et Manhattan donc
+le code est 5.</p>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><p>Les deux films vont dans le fragment <span class="math notranslate nohighlight">\(f_{1}\)</span> qui déborde. On
+crée donc un bloc de débordement. Comme <em>p=0</em>,
+c’est <span class="math notranslate nohighlight">\(f_{0}\)</span> qui éclate, donnant naissance à <span class="math notranslate nohighlight">\(f_{4}\)</span>.
+Les enregistrements initialement présents dans <span class="math notranslate nohighlight">\(f_{0}\)</span>
+sont répartis et le chaînage disparaît. La valeur
+de <em>p</em> devient 1 (=numref:<cite>hachExo3</cite>).</p>
+<figure class="align-center" id="id15">
+<span id="hachexo3"></span><a class="reference internal image-reference" href="_images/hachExo3.png"><img alt="_images/hachExo3.png" src="_images/hachExo3.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 4.13 </span><span class="caption-text">Le hachage linéaire après insertion de Metropolis et Manhattan</span><a class="headerlink" href="#id15" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</div></blockquote>
+<p>Donc</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le prochain fragment à éclater sera <span class="math notranslate nohighlight">\(f_{1}\)</span>, et le chaînage
+disparaîtra à cette occasion</p></li>
+<li><p><span class="math notranslate nohighlight">\(h_3\)</span>, qui applique un modulo 8,  s’applique aux recherches
+dans les fragments avant <span class="math notranslate nohighlight">\(f_{1}\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(h_2\)</span> s’applique aux autres recherches.</p></li>
+</ul>
+</div></blockquote>
+</div>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">4. Structures d’index: le hachage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-le-hachage-statique">S1: le hachage statique</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#principes-de-base">Principes de base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recherche-dans-une-table-de-hachage">Recherche dans une table de hachage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mises-a-jour">Mises à jour</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-hachage-extensible">S2: Hachage extensible</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-hachage-lineaire">S3: hachage linéaire</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="arbreb.html" title="3. Structures d’index: l’arbre B"
+             >précédent</a> |
+          <a href="moteurs.html" title="5. Moteurs de stockage"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;4. &lt;/span&gt;Structures d’index: le hachage</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

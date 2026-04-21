@@ -1,0 +1,10 @@
+Pour Modifier le theme: aller dans
+
+ /Library/Python/2.7/site-packages/Sphinx-1.2-py2.7.egg/sphinx/themes/
+ 
+ C'est dans layout.html. Remplacer par exemple subttille par title 
+ 
+ Les traductions sont dans /Library/Python/2.7/site-packages/Sphinx-1.2-py2.7.egg/sphinx/locale/fr/LC_MESSAGES
+ 
+ 
+ Il faut commenter dans conf.py la ligne d'inclusion de Sphinx_eqt pour compiler en latex.

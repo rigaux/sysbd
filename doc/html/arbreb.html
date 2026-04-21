@@ -1,0 +1,1712 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>3. Structures d’index: l’arbre B &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="4. Structures d’index: le hachage" href="hachage.html" />
+    <link rel="prev" title="2. Dispositifs de stockage" href="stock.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;3. &lt;/span&gt;Structures d’index: l’arbre B</a></div>
+        <div class="rel">
+          <a href="stock.html" title="2. Dispositifs de stockage"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="hachage.html" title="4. Structures d’index: le hachage"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="structures-d-index-l-arbre-b">
+<span id="chap-arbreb"></span><h1><span class="section-number">3. </span>Structures d’index: l’arbre B<a class="headerlink" href="#structures-d-index-l-arbre-b" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Quand une table est volumineuse, un parcours séquentiel est une
+opération relativement lente et pénalisante pour l’exécution
+des requêtes, notamment dans le cas des jointures
+où ce parcours séquentiel doit parfois être effectué
+répétitivement. La création d’un <em>index</em> permet d’améliorer considérablement les temps de réponse en
+créant des chemins d’accès aux enregistrements beaucoup plus
+directs. Un index permet de satisfaire certaines requêtes (mais pas toutes) portant sur un
+ou plusieurs attributs (mais pas tous). Il ne s’agit donc jamais d’une méthode universelle
+qui permettrait d’améliorer indistinctement tous les types d’accès à une table.</p>
+<p>L’index peut exister indépendamment
+de l’organisation du fichier de données, ce qui permet d’en
+créer plusieurs si on veut être en mesure d’optimiser plusieurs types de requêtes.
+En contrepartie la création sans discernement d’un nombre important d’index peut être pénalisante
+pour le SGBD qui doit gérer, pour chaque opération
+de mise à jour sur une table, la répercussion
+de cette mise à jour sur tous les index de la table.
+Un choix judicieux des index, ni trop
+ni trop peu, est donc un des facteurs
+conditionnant la performance d’un système.</p>
+<p>Ce chapitre présente les structures d’index les plus classiques utilisées dans les systèmes relationnels.
+Après un introduction présentant les principes de base des index, nous décrivons en détail
+une structure de données appelée  <em>arbre-B</em> qui est à la fois simple,
+très performante et propre à optimiser plusieurs types de
+requêtes: recherche par clé, recherche par intervalle,
+et recherche avec un préfixe de la clé.  Le « B » vient de
+<em>balanced</em> en anglais, et signifie que l’arbre est équilibré:
+tous les chemins partant de la racine vers une feuille ont la même
+longueur. L’arbre B est utilisé dans <em>tous</em> les SGBD relationnels.</p>
+<p>Pour illustrer les techniques d’indexation d’une table
+nous prendrons deux exemples.</p>
+<div class="admonition-exemple-des-films admonition">
+<p class="admonition-title">Exemple des films</p>
+<p>Le premier
+est destiné à illustrer les structures et les algorithmes
+sur un tout petit ensemble de données, celui
+de la table <em>Film</em>, avec les 16 lignes du
+tableau ci-dessous. Nous ne
+donnons que les deux attributs <code class="docutils literal notranslate"><span class="pre">titre</span></code> et <code class="docutils literal notranslate"><span class="pre">année</span></code> qui
+seront utilisés pour l’indexation.</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Titre</p></th>
+<th class="head"><p>Année</p></th>
+<th class="head"><p>(autres colonnes)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Vertigo</p></td>
+<td><p>1958</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Brazil</p></td>
+<td><p>1984</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Twin Peaks</p></td>
+<td><p>1990</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Underground</p></td>
+<td><p>1995</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Easy Rider</p></td>
+<td><p>1969</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Psychose</p></td>
+<td><p>1960</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Greystoke</p></td>
+<td><p>1984</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shining</p></td>
+<td><p>1980</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Annie Hall</p></td>
+<td><p>1977</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Jurassic Park</p></td>
+<td><p>1992</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Metropolis</p></td>
+<td><p>1926</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Manhattan</p></td>
+<td><p>1979</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Reservoir Dogs</p></td>
+<td><p>1992</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Impitoyable</p></td>
+<td><p>1992</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-even"><td><p>Casablanca</p></td>
+<td><p>1942</p></td>
+<td><p>…</p></td>
+</tr>
+<tr class="row-odd"><td><p>Smoke</p></td>
+<td><p>1995</p></td>
+<td><p>…</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition-exemple-d-une-grosse-collection admonition">
+<p class="admonition-title">Exemple d’une grosse collection</p>
+<p>Le deuxième exemple est destiné à montrer, avec des ordres
+de grandeur réalistes (quoique modestes selon les normes actuelles),
+l’amélioration obtenue par
+des structures d’index, et les caractéristiques,
+en espace et en temps, de ces structures. Nous supposerons
+que la table contient un million (1 000 000) de films, la taille
+de chaque enregistrement étant de 1200 octets. Pour une taille
+de bloc de 4 096 octets, on aura donc au mieux 3 enregistrements
+par bloc. Il faut donc 333 334 blocs (<span class="math notranslate nohighlight">\(\lfloor 1000000/3 \rfloor\)</span>)
+occupant un peu plus de 1,3 Go (1 365 336 064 octets,
+le surplus étant imputable à l’espace perdu dans chaque bloc).
+Pour simplifier les calculs, on arrondira à 300 000 blocs.
+C’est sur ce fichier  que nous allons
+construire nos index.</p>
+</div>
+<section id="s1-indexation-de-fichiers">
+<h2>S1: Indexation de fichiers<a class="headerlink" href="#s1-indexation-de-fichiers" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slindex.pdf">Diapositives: structures d’index</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc99df9cyuazxyh/">Vidéo sur les structures d’index</a></p></li>
+</ul>
+</div>
+<section id="structure-et-contenu-des-index">
+<h3>Structure et contenu des index<a class="headerlink" href="#structure-et-contenu-des-index" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Prenez n’importe quel livre de cuisine, de bricolage, d’informatique,
+ou autre sujet technique: il contient un <em>index</em>. Cet index  présente
+une liste des termes considérées comme importants, classés en ordre alphabétique,
+et associées aux numéros des pages où on trouve un développement
+consacré à ce terme. On peut donc, avec l’index, accéder directement
+à la page (ou aux pages en général) contenant un terme donné.</p>
+<p>Les index dans un SGBD suivent exactement les mêmes principes. On choisit dans
+une table un (au moins) ou plusieurs attributs, dont les valeurs
+constituent la <em>clé d’indexation</em>. Ces valeurs
+sont l’équivalent des termes indexant le livre.
+On associe à chaque valeur la liste des <em>adresse(s)</em> vers le (ou les
+enregistrements) correspondant à cette valeur: c’est l’équivalent
+des numéros de page. Et finalement, on trie alors cette liste selon l’ordre
+alphanumérique pour obtenir l’index.</p>
+<p>Pour bien utiliser l’index, il faut être en mesure de trouver
+rapidement le terme qui nous intéresse. Dans un livre, une pratique
+spontanée consiste à prendre une page de l’index au hasard
+et à déterminer, en fonction de la lettre courante, s’il faut
+regarder avant ou après pour trouver le terme qui nous intéresse.
+On peut recommencer la même opération sur la partie qui suit ou qui
+précède, et converger ainsi très rapidement vers la
+page contenant le terme (recherche dite « par dichotomie »). Les
+index des SGBD sont organisés pour appliquer exactement
+la même technique.</p>
+<div class="admonition-quelques-definitions admonition">
+<p class="admonition-title">Quelques définitions</p>
+<p>Voici la signification des termes propres à l’indexation.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Une <strong>clé</strong> (d’indexation) est une liste (l’ordre est important)
+d’attributs d’une table. En toute rigueur, il faudrait toujours distinguer la clé
+(les noms d’attributs) de la valeur de la clé (celles que l’on
+trouve dans un enregistrement). On se passera de la distinction quand
+elle est claire par le contexte.</p></li>
+<li><p>Une <strong>adresse</strong> est un emplacement physique dans la base
+de données, qui peut être soit celle d’un bloc, soit
+un peu plus précisément celle d’un enregistrement
+dans un bloc. Reportez-vous au chapitre sur la stockage qui détaille
+comment est construite l’adresse d’un enregistrement.</p></li>
+<li><p>une <strong>entrée</strong> (d’index) est un enregistrement constitué d’une paire
+de valeurs. La première est la valeur de la clé, la seconde une adresse.</p></li>
+<li><p>Un <strong>index</strong> est un fichier structuré dont les enregistrements sont
+des <em>entrées</em>.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Continuons l’analogie en examinant le cas particulier d’un <em>dictionnaire</em>.
+Dans un dictionnaire, les mots sont placés dans l’ordre, alors que dans un livre classique
+ils apparaissent sans ordre prédéfini. On peut donc se servir d’un dictionnaire
+comme d’un index, et chercher par approximations successives (par dichotomie
+en termes algorithmiques) la page contenant le terme dont on cherche la définition.
+Cela facilite considérablement les recherches et permet de se passer d’un index.
+On pourrait malgré tout en créer un pour accélérer encore la recherche. Il serait
+alors pertinent de tirer
+parti de l’ordre existant  sur les mots du dictionnaire.
+Une possibilité est de se s’intéresser, pour l’index, qu’au  premier mot
+de chaque page. Imaginons que l’on trouve alors dans cet index les <em>entrées</em> suivantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>…</p></li>
+<li><p>ballon, page 56</p></li>
+<li><p>bille, page 57</p></li>
+<li><p>bulle, page 65,</p></li>
+<li><p>cable, page 72</p></li>
+<li><p>…</p></li>
+</ul>
+</div></blockquote>
+<p>Comment peut-on utiliser un tel index pour trouver directement dans le dictionnaire
+un mot quelconaue, <em>même s’il ne figure pas dans l’index</em>?
+Voici quelques réponses, toutes basées sur le fait que le dictionnaire est trié.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>si je cherche le mot <em>armée</em>, je <em>sais</em> qu’il est avant la page 56</p></li>
+<li><p>si je cherche le mot <em>crabe</em>, je <em>sais</em> qu’il est après la page 72</p></li>
+<li><p>si je cherche le mot <em>botte</em>, je <em>sais</em> qu’il est entre les pages 57 (incluse) et 65 (excluse)</p></li>
+<li><p>et enfin, encore plus précis, si je cherche le mot <em>belle</em>, je <em>sais</em> qu’il
+se trouve dans la page 56</p></li>
+</ul>
+</div></blockquote>
+<p>Le dernier exemple nous montre comment un tel index sert une recherche d’un mot <em>m</em>
+en deux étapes. Grâce
+à l’index je trouve la page <em>p</em> associée au mot précédant immédiatement <em>m</em>; puis j’accède à
+la page <em>p</em> et je cherche
+le mot par une recherche dichotomique locale.</p>
+<p>Dans une base de données, l’équivalent
+de la page est le <em>bloc</em>, dont nous avons vu qu’il est entièrement en mémoire RAM ou
+pas du tout. Chercher localement dans un bloc en mémoire RAM prend un temps négligeable par
+rapport à l’accès éventuel à ce bloc sur le disque, de même que chercher dans
+la page d’un dictionnaire prend un temps négligeable pour un lecteur par rapport
+à un parcours des pages du dictionnaire.</p>
+<p>Si les enregistrements d’un fichier sont triés sur la clé, alors on peut construire
+l’index sur la valeur de clé du premier enregistrement de chaque bloc. C’est l’équivalent
+de l’indexation du dictionnaire, et ce type d’index est dit <em>non dense</em>. En l’absence
+de tri il faut indexer toutes les valeurs de clé. C’est l’équivalent de l’index d’un
+livre de cuisine, et ce type d’index est dit <em>dense</em>.</p>
+<p><em>Dans tous les cas l’index lui-même est trié sur la clé</em>. C’est cette propriété qui garantit
+son efficacité.</p>
+</section>
+<section id="comment-chercher-avec-un-index">
+<h3>Comment chercher avec un index<a class="headerlink" href="#comment-chercher-avec-un-index" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un index est construit sur une <em>clé</em>, et sert à accélerer
+les recherches pour lesquelles cette clé sert de critère.</p>
+<p>Le principe de base d’un index est de construire une structure
+permettant d’optimiser les <em>recherches par clé</em> sur un fichier.
+Le terme de « clé » doit être compris ici au sens
+de « critère de recherche », ce qui diffère de la notion
+de  clé primaire d’une table. Les recherches par clé sont
+typiquement les sélections de lignes pour lesquelles
+la clé a une certaine valeur. Reprenons le cas
+d’un livre de recettes de cuisine. On peut construire
+l’index sur le <em>nom</em> de la recette (c’est la clé).
+On peut utiliser cet index pour les recherches suivantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>par valeur de clé: on trouve directement la page pour « blanquette »
+ou « soufflé »;</p></li>
+<li><p>par <em>intervalle</em> des valeurs de clé: si on cherche les recettes entre
+« daube » et « daurade aux navets », on trouvera un intervalle de
+pages;</p></li>
+<li><p>par <em>préfixe</em> de la valeur de la clé: si je cherche toutes les
+recettes commençant par « dau », l’index me permet de trouver
+là encore l’intervalle des pages couvrant les recettes.</p></li>
+</ul>
+</div></blockquote>
+<p>Le fait de pouvoir rechercher par intervalle ou par préfixe est
+une conséquence de l’ordre de l’index, trié sur les valeurs de clés.
+Il n’est pas possible en revanche de rechercher par <em>suffixe</em>: si je cherche
+les recettes terminant par « ette » (blanquette, piquette et vinaigrette), je n’ai
+pas vraiment d’autre solution que de parcourir la liste ou le livre entier.</p>
+<p>Et, bien sûr (mais ça va mieux en le disant), l’index ne permet
+pas de chercher sur des valeurs autres que celles de la clé. Avec l’index
+précédent, je ne peux pas chercher par ingrédient: « veau », « œuf », « carotte ».
+Mais rien ne m’empêche de créer un <em>autre</em> index sur les ingrédients.
+On peut en fait créer autant d’index que l’on veut, sur autant de clés que l’on
+souhaite. Cela alourdit le contenu du livre (ou de la base de données), rend plus
+complexe sa production (c’est vrai aussi de la base), mais cela peut valoir le coup
+si chaque index est utilisé fréquemment.</p>
+<p>En l’absence d’un index approprié,
+il n’existe qu’une solution possible: parcourir
+séquentiellement le livre (la table dans le cas d’une base de données)
+en examinant chaque page/bloc.
+Sur notre exemple, cela revient à lire les 300 000 blocs
+du fichier, pour un coût qui peut être de l’ordre de 5 mns = 300 secondes
+si le fichier est extrêmement mal organisé sur le disque (chaque
+lecture comptant alors au pire pour environ 10 ms).</p>
+<p>Un index permet d’éviter ce parcours séquentiel. La recherche
+par index d’effectue en deux étapes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le parcours de l’index doit fournir l’adresse
+de l’enregistrement;</p></li>
+<li><p>par accès direct au fichier
+en utilisant l’adresse obtenue précédemment, on obtient
+l’enregistrement (ou le bloc contenant l’enregistrement,
+ce qui revient au même en terme de coût).</p></li>
+</ul>
+</div></blockquote>
+<p>Voilà pour les principes: tout ce qui compte pour la compréhension des structures d’index
+et de leur utilisation
+est dit ci-dessus, le reste est de l’ordre du détail technique.</p>
+</section>
+<section id="index-non-dense">
+<h3>Index non-dense<a class="headerlink" href="#index-non-dense" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous commençons par considérer le cas d’un fichier trié
+sur la clé primaire. Il n’y a donc qu’un seul
+enregistrement pour une valeur de clé, et le fichier a globalement
+la même structure d’un dictionnaire.
+Dans ce cas particulier il est possible, comme nous l’avons vu
+dans le chapitre <a class="reference internal" href="stock.html#chap-stock"><span class="std std-ref">Dispositifs de stockage</span></a>, d’effectuer une recherche
+par dichotomie qui s’appuie sur une division
+récursive du fichier, avec des performances
+théoriques très satisfaisantes. En pratique la recherche
+par dichotomie suppose que le fichier est constitué
+d’une seule séquence de blocs, ce qui permet
+à chaque étape de la récursion de trouver le bloc
+situé au mileu de l’espace de recherche.</p>
+<p>Si cette condition est facile à satisfaire  pour un tableau en mémoire, elle l’est beaucoup
+moins pour un fichier dépassant le Gigaoctet. La première structure que
+nous étudions permet d’effectuer des recherches sur un fichier
+trié, même si ce fichier est fragmenté.</p>
+<p>L’index est lui-même un fichier, contenant des entrées (voir définition
+ci-dessus) <code class="docutils literal notranslate"><span class="pre">[valeur,</span> <span class="pre">adresse]</span></code> où <code class="docutils literal notranslate"><span class="pre">valeur</span></code> désigne une valeur de la
+clé de recherche, et <code class="docutils literal notranslate"><span class="pre">adresse</span></code> l’adresse d’un bloc.</p>
+<p>Toutes les valeurs de clé existant dans le fichier
+de données  ne sont pas représentées dans l’index:
+on dit que l’index est  <em>non-dense</em>. On tire
+parti du fait que le fichier est trié sur la clé
+pour ne faire figurer dans l’index que les valeurs
+de clé du <em>premier</em> enregistrement de chaque bloc.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Souvenez-vous de la remarque ci-dessus pour les dictionnaires,
+et du petit exemple que nous avons donné d’un index contenant les premiers
+mots de chaque page: nous sommes <em>exactement</em> dans cette situation.</p>
+</div>
+<p>Cette information est suffisante pour trouver
+n’importe quel enregistrement.</p>
+<p>La  <a class="reference internal" href="#idxnondense"><span class="std std-numref">Fig. 3.1</span></a> montre un index non-dense sur le fichier des 16 films, la clé étant
+le titre du film, et l’adresse étant symbolisée par
+un cercle bleu.  On suppose que chaque
+bloc du fichier de données (contenant les films) contient 4 enregistrements,
+ce qui donne un minimum de <em>quatre</em> blocs. Il suffit
+alors de <em>quatre entrées</em> <code class="docutils literal notranslate"><span class="pre">[titre,</span> <span class="pre">adr]</span></code>
+pour indexer le fichier. Les titres utilisés
+sont ceux des premiers enregistrements de chaque
+bloc, soit respectivement <em>Annie Hall</em>,
+<em>Greystoke</em>, <em>Metropolis</em> et <em>Smoke</em>.</p>
+<figure class="align-center" id="id2">
+<span id="idxnondense"></span><a class="reference internal image-reference" href="_images/indexNonDense.png"><img alt="_images/indexNonDense.png" src="_images/indexNonDense.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.1 </span><span class="caption-text">Un index non dense</span><a class="headerlink" href="#id2" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Si on désigne par <span class="math notranslate nohighlight">\({c_1, c_2, \cdots, c_n}\)</span> la liste
+ordonnée des clés dans l’index, il est facile de constater
+qu’un enregistrement dont la valeur de clé est <span class="math notranslate nohighlight">\(c\)</span>
+est stocké dans le bloc associé à la clé <span class="math notranslate nohighlight">\(i\)</span> telle
+que <span class="math notranslate nohighlight">\(c_i \leq c &lt; c_{i+1}\)</span>.
+Supposons que l’on recherche le film <em>Shining</em>.
+En consultant l’index on constate que ce titre
+est compris entre <em>Metropolis</em> et <em>Smoke</em>.
+On en déduit donc que <em>Shining</em> se trouve dans le même
+bloc que  <em>Metropolis</em> dont l’adresse est donnée par l’index. Il suffit de lire ce bloc
+et d’y rechercher l’enregistrement. Le même algorithme
+s’applique aux recherches basées sur un préfixe
+de la clé (par exemple tous les films
+dont le titre commence par “V”).</p>
+<p>Le coût d’une recherche dans l’index est considérablement
+plus réduit que celui d’une recherche dans le fichier principal.
+D’une part les enregistrements dans l’index (les entrées)
+sont beaucoup plus petits que ceux du fichier de données
+puisque seule la clé (et une adresse) y figurent. D’autre
+part l’index ne comprend qu’un enregistrement par bloc.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Considérons l’exemple de notre fichier
+contenant un million de films.
+Il est constitué de 300 000 blocs. Supposons qu’un titre
+de films occupe 20 octets en moyenne, et l’adresse d’un bloc
+8 octets. La taille de l’index est donc <span class="math notranslate nohighlight">\(300\,000 * (20 + 8)\)</span> = 8,4 Mo
+octets, à comparer aux 1,3 Go du fichier de données.</p>
+</div>
+<p>Le fichier d’index étant trié, il est bien entendu possible de recourir
+à une recherche par dichotomie pour trouver l’adresse du bloc
+contenant un enregistrement. Une seule lecture
+suffit alors pour trouver l’enregistrement lui-même.</p>
+<p>Dans le cas d’une recherche par intervalle, l’algorithme
+est très semblable: on recherche dans l’index l’adresse
+de l’enregistrement correspondant à la borne inférieure
+de l’intervalle. On accède alors au fichier grâce à
+cette adresse et il suffit de partir de
+cet emplacement et d’effectuer un parcours
+séquentiel pour obtenir tous les enregistrements
+cherchés. La recherche s’arrête quand on trouve un enregistrement
+donc la clé est supérieure à la borne supérieure
+de l’intervalle.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Supposons que l’on recherche tous les films
+dont le titre commence par une lettre entre “J” et “P”.
+On procède comme suit:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on recherche dans l’index la plus grande valeur
+strictement inférieure à “J”: pour l’index
+de la  <a class="reference internal" href="#idxnondense"><span class="std std-numref">Fig. 3.1</span></a> c’est <em>Greystoke</em>;</p></li>
+<li><p>on accède au bloc du fichier de données, et on y trouve
+le premier enregistrement avec un titre commençant
+par “J”, soit <em>Jurassic Park</em>;</p></li>
+<li><p>on parcourt la suite du fichier jusqu’à trouver
+<em>Reservoir Dogs</em> qui est au-delà de l’intervalle
+de recherche: tous les enregistrements
+trouvés durant ce parcours constituent le résultat
+de la requête.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Le coût d’une recherche par intervalle peut être assimilé, si
+on néglige la recherche dans l’index, au parcours de la partie
+du fichier qui contient le résultat, soit
+<span class="math notranslate nohighlight">\(\frac{r}{b}\)</span>, où <span class="math notranslate nohighlight">\(r\)</span> désigne le nombre d’enregistrements
+du résultat, et <span class="math notranslate nohighlight">\(b\)</span> le nombre d’enregistrements dans
+un bloc. Ce coût est optimal (on n’accède à aucun bloc qui ne participe
+pas au résultat).</p>
+<p>Un index non dense est extrêmement efficace pour les opérations de recherche.
+Bien entendu le problème est de maintenir l’ordre du fichier
+au cours des opérations d’insertions et de destructions,
+problème  encore compliqué par la nécessité de garder
+une étroite correspondance entre l’ordre du fichier de données
+et l’ordre du fichier d’index. Ces difficultés expliquent que
+ce type d’index soit peu utilisé par les SGBD, au profit de
+l’arbre-B qui offre des performances comparables pour
+les recherches par clé, mais se réorganise dynamiquement.</p>
+</section>
+<section id="index-dense">
+<h3>Index dense<a class="headerlink" href="#index-dense" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Que se passe-t-il quand on veut indexer
+un fichier qui n’est pas trié sur la clé de recherche?
+On ne peut plus tirer parti de l’ordre des enregistrements pour
+introduire seulement dans l’index la valeur de clé
+du premier élément de chaque bloc. Il faut
+donc baser l’index sur <em>toutes</em>
+les valeurs de clé existant dans le fichier,
+et les associer à l’adresse d’un enregistrement,
+et pas à l’adresse d’un bloc.
+Un tel index est <em>dense</em>.</p>
+<p>La  <a class="reference internal" href="#idxdense"><span class="std std-numref">Fig. 3.2</span></a> montre le même fichier
+contenant seize films, trié sur le titre, et indexé
+maintenant sur l’année de parution des films.
+On constate d’une part que toutes les années du fichier
+de données sont reportées dans l’index, ce qui accroît
+considérablement la taille de ce dernier, et d’autre part
+qu’à une même année sont associées plusieurs adresses correspondant aux  films
+parus cette année là (l’index n’est pas <em>unique</em>).</p>
+<figure class="align-center" id="id3">
+<span id="idxdense"></span><a class="reference internal image-reference" href="_images/indexDense.png"><img alt="_images/indexDense.png" src="_images/indexDense.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.2 </span><span class="caption-text">Un index  dense (tous les liens ne sont pas représentés)</span><a class="headerlink" href="#id3" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Considérons l’exemple de notre fichier
+contenant un million de films.
+Il faut créer une entrée d’index pour
+chaque film. Une année occupe 4 octets,
+et l’adresse d’un bloc
+8 octets. La taille de l’index est donc
+<span class="math notranslate nohighlight">\(1\,000\,000 * (4 + 8) =12\,000\,000\)</span>
+octets, soit (seulement) cent fois moins
+que le fichier de données.</p>
+</div>
+<p>Un index dense peut coexister avec un index non-dense.
+Comme le suggèrent les deux exemples qui précèdent, on
+peut envisager de trier un fichier sur la clé primaire et
+créer un index non-dense, puis ajouter
+des index denses pour les attributs qui servent
+fréquemment de critère de recherche. On parle
+alors parfois <em>d’index primaire</em> et <em>d’index secondaire</em>,
+bien que ces termes soient moins précis (index plaçant
+et non plaçant serait plus rigoureux).</p>
+<p>Il est possible  en fait de créer autant d’index denses
+que l’on veut puisqu’ils sont indépendants de l’organisation du fichier de
+données. Cette remarque n’est plus vraie dans le cas
+d’un index non-dense puisqu’il s’appuie
+sur le tri du fichier et qu’un fichier ne peut être trié
+que d’une seule manière. <em>Il ne peut y avoir qu’un seul
+index non-dense par fichier de données</em>.</p>
+<p>La recherche par clé ou par préfixe avec un
+index dense est similaire à celle déjà présentée
+pour un index non-dense. Si la clé n’est
+pas unique (cas des années de parution des films),
+il faut prendre garde à lire dans l’index <em>toutes</em>
+les adresses correspondant  au critère de recherche.
+Par exemple, pour rechercher tous les films
+parus en 1992 dans l’index de la  <a class="reference internal" href="#idxdense"><span class="std std-numref">Fig. 3.2</span></a>,
+on doit suivre les adresses
+pointant respectivement sur <em>Jurassic Park</em>,  <em>Impitoyable</em>
+et <em>Reservoir Dogs</em>.</p>
+<p>Notez que rien ne garantit que les films parus
+en 1992 sont situés dans le même bloc: on
+dit que l’index est <em>non-plaçant</em>. Cette
+remarque a surtout un impact sur les recherches
+par intervalle, comme le montre l’exemple suivant.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Voici l’algorithme qui recherche tous les films parus
+dans l’intervalle [1950, 1979].</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on recherche dans l’index
+la première valeur comprise dans l’intervalle:
+pour l’index
+de la  <a class="reference internal" href="#idxdense"><span class="std std-numref">Fig. 3.2</span></a> c’est <code class="docutils literal notranslate"><span class="pre">1958</span></code>;</p></li>
+<li><p>on accède au bloc du fichier de données pour y prendre
+l’enregistrement <em>Vertigo</em>: notez
+que cet enregistrement est placé dans le dernier bloc
+du fichier;</p></li>
+<li><p>on parcourt la suite de l’index, en accédant
+à chaque fois à l’enregistrement correspondant
+dans le fichier de données, jusqu’à trouver
+une année supérieure à 1979: on trouve
+successivement <em>Psychose</em> (troisième bloc),
+<em>Easy Rider</em>, <em>Annie Hall</em> (premier bloc)
+et <em>Manhattan</em> (deuxième bloc).</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Pour trouver 5 enregistements, on a dû accéder aux quatre blocs,
+dans un ordre quelconque. C’est beaucoup moins efficace que de parcourir
+les 4 blocs du fichier en séquence.
+Le coût d’une recherche par intervalle est, dans le pire
+des cas, égale à <span class="math notranslate nohighlight">\(r\)</span> où <em>r</em> désigne le nombre
+d’enregistrements du résultat (soit
+une lecture de bloc par enregistrement). Il est intéressant
+de le comparer avec le coût <span class="math notranslate nohighlight">\(\frac{r}{b}\)</span>
+d’une recherche par intervalle avec un index non-dense:
+on a perdu le facteur de blocage obtenu par un
+regroupement des enregistrements dans un bloc.</p>
+<p>Cet exemple montre qu’une recherche par intervalle entraîne des
+accès aléatoires aux blocs du fichier à cause de l’indirection
+inhérente à la structure. À partir d’un certain stade (rapidement
+en fait: le calcul peut se déduire de la petite analyse qui précède)
+il vaut mieux un bon parcours séquentiel qu’une mauvaise
+multiplication des accès directs.</p>
+</section>
+<section id="index-multi-niveaux">
+<h3>Index multi-niveaux<a class="headerlink" href="#index-multi-niveaux" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Il peut arriver que la taille du fichier d’index
+devienne elle-même si  grande que les recherches
+dans l’index en soit pénalisées. La solution naturelle est
+alors d’indexer le fichier d’index lui-même.
+Rappelons qu’un index est un fichier constitué
+d’entrées <code class="docutils literal notranslate"><span class="pre">[clé,</span> <span class="pre">adr]</span></code>,  trié sur la
+clé. <em>Ce tri nous permet d’utiliser, dès le deuxième
+niveau d’indexation, les principes des index non-denses</em>:
+on se contente d’indexer la première valeur de clé de chaque bloc.</p>
+<p>Reprenons l’exemple de l’indexation des films
+sur l’année de parution. Nous avons vu que
+la taille du fichier était 100 fois
+moindre que celle du fichier de données. Même
+s’il est possible d’effectuer une recherche
+par dichotomie, cette taille peut devenir pénalisante
+pour les opérations de recherche.</p>
+<p>On peut alors créer un deuxième niveau d’index,
+comme illustré sur la  <a class="reference internal" href="#idxmultiniv"><span class="std std-numref">Fig. 3.4</span></a>.
+On a supposé, pour la clarté de l’illustration, qu’un
+bloc de l’index de premier niveau ne contient au plus que 3
+entrées [<code class="docutils literal notranslate"><span class="pre">année,</span> <span class="pre">adr</span></code>]. Il faut donc quatre blocs
+pour ce premier niveau d’index.</p>
+<figure class="align-center" id="id4">
+<span id="idx2niv"></span><a class="reference internal image-reference" href="_images/index2Niveaux.png"><img alt="_images/index2Niveaux.png" src="_images/index2Niveaux.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.3 </span><span class="caption-text">Index avec 2 niveaux: le second indexe le premier, qui indexe le fichier</span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’index de second niveau est construit sur la clé
+du premier enregistrement de chaque bloc de l’index de premier niveau.
+On diminue donc le nombre d’entrées par 3 (nombre d’enregistrements
+par bloc, ou facteur de blocage) entre le premier et le second niveau.
+On y gagne en espace: sur notre exemple, la taille est diminuée par deux.
+Dans un cas réel, le facteur de blocage est de quelques centaines (on met
+plusieurs centaines d’entrées d’index dans un bloc de 4 096 octets), et
+le taux de réduction d’un niveau à un autre est donc considérable.</p>
+<p>Tout l’intérêt d’un index multi-niveaux  est
+de pouvoir passer, dès le second niveau,  d’une structure
+dense à une structure non-dense. Si ce n’était
+pas le cas on n’y gagnerait rien puisque tous les niveaux
+auraient la même taille que le premier.</p>
+<p>Peut-on créer un troisième niveau, un quatrième niveau? Oui, bien
+sûr. Quand s’arrête-t-on? Et bien, si on se souvient que la granularité
+de lecture est le bloc, on peut dire que quand un niveau d’index tient dans
+un seul bloc, il est inutile d’aller plus loin.</p>
+<p>Pour notre exemple, on peut créer un troisième niveau, illustré par
+la <a class="reference internal" href="#idxmultiniv"><span class="std std-numref">Fig. 3.4</span></a>. Ce troisième niveau est constitué d’un seul bloc.
+Comme on ne peut pas faire un fichier plus petit, on arrête là.</p>
+<figure class="align-center" id="id5">
+<span id="idxmultiniv"></span><a class="reference internal image-reference" href="_images/indexMultiNiv.png"><img alt="_images/indexMultiNiv.png" src="_images/indexMultiNiv.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.4 </span><span class="caption-text">Index multi-niveaux</span><a class="headerlink" href="#id5" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Une recherche, par clé ou par intervalle, part
+toujours du niveau le plus élevé, et reproduit
+d’un niveau à l’autre les procédures de recherches présentées
+précédemment. Pour une recherche par clé, le coût
+est égal au nombre de niveaux de l’arbre.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>On recherche le ou les films parus en 1980, avec
+l’index de la <a class="reference internal" href="#idxmultiniv"><span class="std std-numref">Fig. 3.4</span></a>.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Partant du troisième niveau d’index, on
+décide qu’il faut descendre vers la droite pour accéder
+au second bloc du deuxième niveau d’index.</p></li>
+<li><p>Le contenu
+de ce second bloc nous indique qu’il faut cette fois descendre
+vers la gauche, vers le troisième bloc du premier niveau d’index.</p></li>
+<li><p>On trouve dans ce troisième bloc l’entrée correspondant à  1980,
+avec les adresses des films à aller chercher dans le fichier de données.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<p>Les index multi-niveaux sont très efficaces
+en recherche, et ce même pour des jeux de données
+de très grande taille. Le problème est,
+comme toujours, la difficulté de maintenir des fichiers compacts et
+triés. L’arbre-B,
+étudié dans la section qui suit, représente
+l’aboutissement des idées présentées jusqu’ici, puisqu’à
+des performances équivalentes à celles des index séquentiels
+en recherche, il ajoute des algorithmes
+de réorganisation dynamique qui résolvent la question de la maintenance
+d’une structure triée.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ol class="arabic">
+<li><p>Qu’appelle-t-on une <em>entrée</em> d’index?</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le premier bloc de l’index</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Un enregistrement de l’index, de la forme <em>(clé, adresse)</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’intervalle de valeur couvert par les clés d’un même bloc</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’intervalle entre deux clés de l’index</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Combien d’index non denses  peut-on créer sur un fichier de données</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Au plus 1</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Exactement 1</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Autant que l’on veut</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est le type d’index adapté à un dictionnaire?</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  dense</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  non dense</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>La clé d’indexation de mon index est la paire (titre, année). Quelles
+requêtes sur la table des films permettent d’utiliser l’index (plusieurs réponses possibles).</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> titre=”Vertigo” et année=1958</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> titre=”Vertigo”</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> année=1958</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> titre entre “Gravity” et “Greystoke”</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> année entre 2010 et 2016</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> titre différent de “Greystoke”</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> genre = “Drame”</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Que reste-t-il à faire après avoir effectué une recherche dans un fichier d’index?</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Refermer le fichier</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Afficher le résultat à l’utilisateur</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Accéder au fichier de données avec l’adresse trouvée dans l’index</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quel est l’inconvénient d’une recherche par intervalle avec un index?</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Il faut effectuer une lecture aléatoire dans le fichier de données pour chaque entrée trouvée</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Il faut répéter le parcours d’index pour chaque valeur de l’intervalle</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> On ne trouve dans l’index que les valeurs extrêmes de l’intervalle</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Pourquoi s’arrêter quand la racine d’un index multi-niveaux contient un seul bloc?</p>
+<div class="reauthoring_embedded_quiz" id="arbrebS1-7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Parce qu’on ne peut pas décomposer ce niveau.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Parce qu’on ne peut pas faire moins que lire un bloc.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Parce qu’on ne saurait plus trouver l’adresse d’un niveau.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ol>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-l-arbre-b">
+<h2>S2: L’arbre-B<a class="headerlink" href="#s2-l-arbre-b" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slarbreb.pdf">Diapositives: arbre B</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v1263dc98fb0ejmjm6ld/">Vidéo consacrée à l’arbre B</a></p></li>
+</ul>
+</div>
+<p>L’arbre-B est une structure très proche des index
+présentés ci-dessus. La principale différence est que
+la granularité de construction de l’index n’est plus un <em>fichier</em>
+représentant un niveau monolithique,
+mais un <em>bloc</em>. Cette granularité minimale permet notamment
+une réorganisation  efficace de l’arbre pour s’adapter
+aux évolutions du fichier de données indexé.</p>
+<p>Commençons par une notion technique, celle <em>d’ordre</em> d’un arbre B.</p>
+<div class="admonition-definition-ordre-d-un-arbre-b admonition">
+<p class="admonition-title">Définition: Ordre d’un arbre B.</p>
+<p>Si un bloc peut contenir au maximum <span class="math notranslate nohighlight">\(n\)</span> entrées, alors <em>l’ordre de l’arbre B</em>
+est <span class="math notranslate nohighlight">\(\lfloor\frac{n}{2} \rfloor\)</span>. L’ordre d’un arbre B correspond
+au nombre minimal d’entrées contenues dans chacun des blocs, propriété
+qui résulte de l’algorithme de construction que nous étudierons plus loin.</p>
+</div>
+<p>L’ordre d’un arbre dépend de la taille de la clé et se détermine simplement
+par le calcul suivant. Soit <span class="math notranslate nohighlight">\(||c||\)</span>  la taille de la clé à indexer (en prendra
+une moyenne pour les clés de taille variable), <span class="math notranslate nohighlight">\(||A||\)</span> la taille d’une adresse
+et <span class="math notranslate nohighlight">\(||B||\)</span> l’espace utile d’un bloc
+(en excluant l’entête), alors le nombre maximum d’entrées <span class="math notranslate nohighlight">\(n\)</span> est</p>
+<div class="math notranslate nohighlight">
+\[\left\lfloor\frac{||B||}{||c|| + || + A||}\right\rfloor\]</div>
+<p>Et l’ordre est <span class="math notranslate nohighlight">\(\lfloor\frac{n}{2} \rfloor\)</span>. Rappelons que la notation
+<span class="math notranslate nohighlight">\(\lfloor x \rfloor\)</span> désigne la partie entière de <span class="math notranslate nohighlight">\(x\)</span>.</p>
+<p>Reprenons l’exemple de notre fichier  contenant un million de films. Admettons qu’une
+entrée d’index occupe 12 octets, soit 8 octets pour l’adresse, et 4 pour la clé (l’année du film).
+Chaque bloc contient 4 096 octets. On place donc   <span class="math notranslate nohighlight">\(\lfloor \frac{4096}{12} \rfloor = 341\)</span>
+entrées au maximum dans un bloc et l’ordre de cet index est <span class="math notranslate nohighlight">\(\lfloor\frac{341}{2} \rfloor = 170\)</span>.</p>
+<p>À partir de maintenant, nous supposons que le fichier des données
+stocke séquentiellement les enregistrements dans l’ordre de leur
+création et donc indépendamment de tout ordre lexicographique ou
+numérique sur l’un des attributs. C’est la situation courante, car la plus facile
+à gérer (et la plus rapide) au moment des insertions. Nous
+allons indexer ce fichier avec un ou plusieurs arbres B.</p>
+<section id="structure-de-l-arbe-b">
+<h3>Structure de l’arbe B<a class="headerlink" href="#structure-de-l-arbe-b" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La  <a class="reference internal" href="#arbrebannees"><span class="std std-numref">Fig. 3.5</span></a> montre un arbre-B indexant notre collection de 16 films,
+avec pour clé d’indexation l’année de parution du film.
+L’index est organisé  en blocs de taille égale, ce
+qui ajoute une souplesse supplémentaire à l’organisation
+en niveaux étudiée précédemment.
+En pratique un bloc peut contenir un grand nombre d’entrées d’index (plusieurs
+centaines, voir plus loin), mais pour la clarté de
+l’illustration nous supposerons que l’on peut stocker au plus 4 entrées d’index
+dans un bloc.</p>
+<figure class="align-center" id="id6">
+<span id="arbrebannees"></span><a class="reference internal image-reference" href="_images/arbreBAnnees.png"><img alt="_images/arbreBAnnees.png" src="_images/arbreBAnnees.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.5 </span><span class="caption-text">Un arbre B construit sur l’année des films</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’index a une structure arborescente constituée de plusieurs niveaux
+(en l’occurence seulement 2). Le niveau le plus bas, celui des <em>feuilles</em>,
+constitue un index <em>dense</em> sur le fichier de données. Le concept d’index
+dense a été présenté précédemment: toutes les valeurs de clé de la collection
+indexée y sont représentées. De plus, elles sont ordonnées, alors que l’on
+peut constater qu’il n’existe aucun ordre correspondant dans le fichier de données.</p>
+<p>En revanche, contrairement aux fichiers d’index traditionnels,
+le niveau des feuilles de l’arbre B n’est pas constitué d’une séquence contiguë
+de blocs, mais d’une <em>liste chaînée</em> de blocs. Chaque bloc-feuille référence le bloc-feuille suivant, ce
+qui permet de parcourir ce niveau, en suivant le chaînage, sans avoir à remonter
+dans l’arbre. Cette organisation est moins efficace qu’un stockage continu (le passage
+d’un bloc à un autre peut entraîner un déplacement des têtes de lecture), mais permet la
+réorganisation dynamique de la liste pour y insérer de nouveaux blocs, comme nous le verrons
+plus loin.</p>
+<p>Dans chaque bloc, au niveau des feuilles, on trouve des <em>entrées</em> d’index, soit
+une paire constituée d’une valeur de clé et d’une adresse vers un enregistrement
+du fichier de données.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Comme plusieurs films ont pu paraître la même année, on peut trouver des
+entrées avec plusieurs adresses associées à une valeur de clé. On pourrait
+aussi trouver plusieurs entrées avec la même valeur de clé. Ce choix d’implantation
+ne remet pas en question la structure de l’index, que nous continuons à décrire.</p>
+</div>
+<p>Les niveaux de l’arbre B situés au-dessus des feuilles (sur notre exemple il n’y
+en a qu’un) sont les niveaux <em>internes</em>. Ils sont eux aussi constitués de blocs
+indépendants, mais sans chaînage associant les blocs d’un même niveau. Chaque bloc
+interne sert d’index local pour se diriger, de bas en haut, dans la structure
+de l’arbre, vers la feuille contenant les valeurs de clé recherchées.</p>
+<p>Regardons notre unique niveau interne, qui est également la racine de l’arbre.
+C’est un index <em>non dense</em>, avec des valeurs de clés triées, et des adresses
+qui s’interprètent de la manière suivante.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>dans le sous-arbre référencé par l’adresse située à gauche de <em>1958</em>, on ne trouve
+que des films parus <em>avant</em> (au sens large) 1958;</p></li>
+<li><p>dans le sous-arbre référencé par l’adresse située entre <em>1958</em> et <em>1969</em>,
+on ne trouve que des films parus <em>après</em> (au sens strict) 1958 et avant (au sens large) 1969;</p></li>
+<li><p>dans le sous-arbre référencé par l’adresse située entre <em>1969</em> et <em>1984</em>,
+on ne trouve que des films parus <em>après</em> (au sens strict) 1969 et avant (au sens large) 1984;</p></li>
+<li><p>enfin, la dernière adresse référence un sous-arbre contenant tous les films parus strictement
+après 1984.</p></li>
+</ul>
+</div></blockquote>
+<p>Chaque bloc d’un nœud interne divise donc l’espace de recherche en 4. Si on a un niveau d’index,
+on va donc, en consultant un bloc de ce niveau, réduire par 4 la taille des données à explorer. Si on a deux
+niveaux, on réduit d’abord par 4, puis encore par 4, soit <span class="math notranslate nohighlight">\(4^2=16\)</span>. Si on a <em>k</em> niveaux,
+on réduit par <span class="math notranslate nohighlight">\(4^k\)</span>. Si, de manière encore plus générale,
+on désigne par <em>n</em>  le nombre d’entrées que l’on peut stocker dans un bloc,
+la « réduction »  apportée par l’index devient <span class="math notranslate nohighlight">\(n^k\)</span>.</p>
+<p>Sur notre exemple de 16 films, avec un seul niveau d’index, et très
+peu d’entrées par bloc, c’est évidemment assez peu spectaculaire, mais dans des conditions plus réalistes,
+on obtient une structure extrêmement efficace. Effectuons quelques calculs pour nous en convaincre.</p>
+<div class="admonition-exemple-indexons-un-million-de-films-sur-l-annee admonition">
+<p class="admonition-title">Exemple: indexons un million de films sur l’année.</p>
+<p>Reprenons l’exemple de notre fichier  contenant un million de films. Admettons qu’une
+entrée d’index occupe 12 octets, soit 8 octets pour l’adresse, et 4 pour la clé (l’année du film).
+Chaque bloc contient 4 096 octets.</p>
+<p>On place donc   <span class="math notranslate nohighlight">\(\lfloor \frac{4096}{12} \rfloor = 341\)</span> entrées
+(au maximum) dans un bloc. Comme le niveau des feuilles de l’abre B est dense,
+il faut <span class="math notranslate nohighlight">\(\lceil \frac{1000000}{341} \rceil=2\,933\)</span> blocs
+pour le  niveau des feuilles.</p>
+<p>Le deuxième niveau est <em>non dense</em>. Il comprend autant d’entrées que de blocs
+à indéxer, soit <span class="math notranslate nohighlight">\(2\,933\)</span>.  Il faut
+donc <span class="math notranslate nohighlight">\(\lceil\frac{2\,933}{341} \rceil = 9\)</span> blocs (au mieux).
+Finalement, un troisième niveau, constitué d’un bloc
+avec 9 entrées suffit pour compléter l’index.</p>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Le calcul précédent est valable dans le <em>meilleur</em> des cas, celui
+où chaque bloc est parfaitement plein. Mais alors quel est le <em>pire</em> des cas?
+La réponse est que l’arbre B garantit que chaque bloc est <em>au moins</em> à moitié plein,
+et donc le pire des cas sur notre exemple serait un remplissage avec 170 entrées
+(la moitié de 341) par bloc. Cette (excellente) propriété de remplissage est une conséquence
+de la méthode de construction de l’index, présentée un peu plus loin.</p>
+</div>
+<p>Voici, réciproquement, une
+petite extrapolation montrant le nombre
+de films indexés en fonction du nombre de niveaux
+dans l’arbre (même remarque que précédemment: on calcule dans le meilleur
+des cas, en supposant qu’un bloc est toujours plein.)</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>avec un niveau d’index (la racine seulement)
+on peut donc indexer 341 films;</p></li>
+<li><p>avec deux niveaux la racine indexe 341
+blocs d’index, référençant chacun  341 films, soit <span class="math notranslate nohighlight">\(341^2 = 116\,281\)</span> films
+indexés au total;</p></li>
+<li><p>avec trois niveaux on indexe <span class="math notranslate nohighlight">\(341^3 = 39\,651\,821\)</span> films;</p></li>
+<li><p>enfin avec quatre niveaux on indexe plus de 1 milliard de films.</p></li>
+</ul>
+</div></blockquote>
+<p>Il y a donc une croissance  très rapide, <em>exponentielle</em>,
+du nombre d’enregistrements indexés en fonction du nombre de niveaux et,
+réciproquement, une croissance très faible, <em>logarithmique</em>
+du nombre de niveaux en fonction du nombre d’enregistrements.</p>
+<p>Le calcul précis est donné par la formule suivante (on suppose que les clés sont
+uniques, le lecteur peut faire lui-même l’extension de la formule au cas des index non uniques).
+On note <span class="math notranslate nohighlight">\(||T||\)</span> la cardinalité d’une table <span class="math notranslate nohighlight">\(T\)</span> (nombre d’enregistrements),
+et <span class="math notranslate nohighlight">\(k\)</span> l’ordre de l’arbre B. Alors la hauteur <span class="math notranslate nohighlight">\(h\)</span> de l’arbre est donnée par</p>
+<div class="math notranslate nohighlight">
+\[\left\lceil\log_{k}(||T||)\right\rceil\]</div>
+<p>Il s’agit d’un calcul théorique qui peut, en pratique, être optimisé par
+diverses techniques, et notamment des méthodes de compression de valeurs de clé
+que nous ne présentons pas ici. La formule ci-dessus doit donc être considérée comme
+donnant un ordre de grandeur.</p>
+<p>L’efficacité d’un arbre-B dépend entre autres de la taille de la clé:
+plus celle-ci est petite, et plus l’index sera petit et efficace.
+Si on indexait les films sur le titre, un chaîne de caractères occupant en moyenne
+quelques dizaines d’octets (disons, 20),
+on pourrait référencer <span class="math notranslate nohighlight">\(\lfloor \frac{4096}{20 + 8} \rfloor = 146\)</span>
+films dans un bloc, et un index avec
+trois niveaux permettrait d’indexer <span class="math notranslate nohighlight">\(146^3= 3\,112\,136\)</span> films!
+Du point de vue des performances, le choix d’une chaîne de caractères
+assez longue comme clé des enregistrements est donc assez défavorable.</p>
+</section>
+<section id="construction-de-l-arbre-b">
+<h3>Construction de l’arbre B<a class="headerlink" href="#construction-de-l-arbre-b" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Voyons maintenant comment le système maintient un arbre-B sur un
+fichier (une table) sans organisation particulière: les enregistrements
+sont placés les uns après les autres dans l’ordre de leur insertion,
+dans une structure dite séquentielle. Nous construisons un arbre B sur le titre
+des films.</p>
+<p>Nous avons donc deux fichiers (ou, de manière un peu plus abstraite, deux
+espaces de stockage indépendants, nommés <em>segments</em> dans ORACLE par exemple): la
+table et l’index.
+Le premier a une structure séquentielle et contient les enregistrements
+représentant les lignes de la table. On va supposer pour la facilité de la présentation
+que l’on peut mettre 4 enregistrements par bloc. Le second fichier a une structure d’arbre B,
+et ses blocs contiennent les entrées de l’index. On va supposer pour l’illustration
+que l’on met au plus deux entrées par bloc. C’est  tout à fait irréaliste, comme l’ont
+montré les calculs précédents, mais cela permet de bien comprendre la méthode.</p>
+<p>La <a class="reference internal" href="#arbreb-1"><span class="std std-numref">Fig. 3.6</span></a> montre la situation initiale,
+avec les deux structures, la seconde indexant la première,
+après l’insertion des deux premiers films. L’arbre est pour l’instant constitué d’un
+unique bloc avec deux entrées (il est donc déjà plein d’après notre hypothèse).</p>
+<figure class="align-center" id="id7">
+<span id="arbreb-1"></span><a class="reference internal image-reference" href="_images/arbreB-1.png"><img alt="_images/arbreB-1.png" src="_images/arbreB-1.png" style="width: 40%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.6 </span><span class="caption-text">Début de la construction, 2 films seulement</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>On insère ensuite <em>Twin Peaks</em>. Pas de problème pour l’enregistrement dans la table,
+qui vient se mettre à la suite
+des autres dans le fichier de données. Il faut également insérer l’entrée correspondante, et,
+d’après notre hypothèse, l’unique bloc de l’arbre B est plein (<a class="reference internal" href="#arbreb-2"><span class="std std-numref">Fig. 3.7</span></a>).</p>
+<figure class="align-center" id="id8">
+<span id="arbreb-2"></span><a class="reference internal image-reference" href="_images/arbreB-2.png"><img alt="_images/arbreB-2.png" src="_images/arbreB-2.png" style="width: 90%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.7 </span><span class="caption-text">Après insertion d’un troisième film, et premier éclatement</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Il faut ajouter un nouveau bloc à l’index, en conservant la structure globale de l’arbre.
+L’ajout d’un bloc suit une procédure dite <em>d’éclatement</em> qui est illustrée sur la
+partie de droite de la <a class="reference internal" href="#arbreb-2"><span class="std std-numref">Fig. 3.7</span></a>. En voici les étapes</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>les entrées du bloc trop plein sont triées sur la valeur de la clé</p></li>
+<li><p>l’entrée correspondant à la valeur <em>médiane</em> est placée dans un nouveau bloc,
+au niveau supérieur (ce nouveau bloc est donc un nœud <em>interne</em>)</p></li>
+<li><p>les entrées inférieures à la valeur médiane sont dans un bloc à gauche; les
+entrées supérieures à la valeur médiane sont dans un bloc à droite</p></li>
+</ul>
+</div></blockquote>
+<p>On aboutit à l’arbre en bas à droite de la <a class="reference internal" href="#arbreb-2"><span class="std std-numref">Fig. 3.7</span></a>. C’est déjà un arbre B avec sa racine, qui est
+un nœud interne, et deux feuilles indexant de manière dense le fichier de données.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Comme le niveau des feuilles est <em>dense</em>, on laisse <em>toujours</em>, quand on éclate
+une <em>feuille</em>,  l’entrée de la valeur médiane dans le bloc de gauche, en plus d’insérer
+une entrée avec cette valeur médiane dans le bloc de niveau supérieur. Ici, la valeur
+<em>Twin Peaks</em> apparaît donc dans <em>deux entrées</em>: celle des feuilles référence l’enregistrement
+du film, celle du bloc interne référence la feuille de l’index.</p>
+</div>
+<p>Continuons avec les insertions de <em>Underground</em>, puis de <em>Easy Rider</em> (<a class="reference internal" href="#arbreb-3"><span class="std std-numref">Fig. 3.8</span></a>). Les enregistrements
+sont placés séquentiellement dans le fichier de données. Pour les entrées d’index, on doit déterminer
+dans quelle feuille on insère. Pour cela on part de la racine, et on suit les adresses comme si on recherchait
+un enregistrement pour la valeur de clé à insérer.</p>
+<p>Dans notre cas, <em>Underground</em> étant supérieur dans l’ordre
+lexicographioque à <em>Twin Peaks</em>, va à droite, et <em>Easy Rider</em> va à gauche.</p>
+<figure class="align-center" id="id9">
+<span id="arbreb-3"></span><a class="reference internal image-reference" href="_images/arbreB-3.png"><img alt="_images/arbreB-3.png" src="_images/arbreB-3.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.8 </span><span class="caption-text">Après insertion de Underground, puis de Easy Rider</span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p><em>Underground</em> vient donc prendre place
+dans la feuille de droite, qui ne déborde pas encore. En revanche, <em>Easy Rider</em> doit aller dans
+la feuille de gauche, qui devient trop pleine. Un <em>éclatement</em> a lieu, l’entrée correspondant
+à la valeur médiane (<em>Easy Rider</em>) est transmise au niveau supérieur qui indexe donc les trois blocs
+de feuilles.</p>
+<p>On continue avec <em>Psychose</em>, puis <em>Greystoke</em> (<a class="reference internal" href="#arbreb-4"><span class="std std-numref">Fig. 3.9</span></a>). Tous deux vont dans le bloc
+contenant initialement <em>Twin Peaks</em>, ce qui entraîne un débordement. La valeur médiane,
+<em>Psychose</em>, doit donc être insérée dans la racine de l’arbre B.</p>
+<figure class="align-center" id="id10">
+<span id="arbreb-4"></span><a class="reference internal image-reference" href="_images/arbreB-4.png"><img alt="_images/arbreB-4.png" src="_images/arbreB-4.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.9 </span><span class="caption-text">Après insertion de <em>Psychose</em> et <em>Greystoke</em></span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Nous avons donc maintenant le cas d’un nœud interne qui déborde à son tour. On applique la même
+procédure d’éclatement, avec identification de la valeur médiane, et insertion
+d’une entrée avec cette valeur dans le bloc parent. Ici, on crée une nouvelle
+racine, en augmentant donc de 1 le nombre de niveaux de l’arbre. On obtient l’arbre
+de la <a class="reference internal" href="#arbreb-4"><span class="std std-numref">Fig. 3.9</span></a>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Quand on éclate un bloc <em>interne</em>, il est inutile de conserver la valeur
+médiane dans les blocs du niveau inférieur. Rappelons que l’indexation des blocs
+<em>internes</em> est non dense et qu’il n’est donc pas nécessaire de représenter
+toutes les valeurs de clés, contrairement aux feuilles.</p>
+</div>
+<p>Et ainsi de suite. La <a class="reference internal" href="#arbreb-5"><span class="std std-numref">Fig. 3.10</span></a> montre l’arbre B après insertion de Shining et Annie Hall,
+et la <a class="reference internal" href="#arbreb-6"><span class="std std-numref">Fig. 3.11</span></a> l’arbre après insertion de 12 films sur 16: je vous laisse compléter
+avec les 4 films restant, soit <em>Reservoir Dogs</em>, <em>Impitoyable</em>, <em>Casablannca</em> et <em>Smoke</em>.</p>
+<figure class="align-center" id="id11">
+<span id="arbreb-5"></span><a class="reference internal image-reference" href="_images/arbreB-5.png"><img alt="_images/arbreB-5.png" src="_images/arbreB-5.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.10 </span><span class="caption-text">Après insertion de <em>Shining</em> et <em>Annie Hall</em></span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<figure class="align-center" id="id12">
+<span id="arbreb-6"></span><a class="reference internal image-reference" href="_images/arbreB-6.png"><img alt="_images/arbreB-6.png" src="_images/arbreB-6.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.11 </span><span class="caption-text">Après insertion de <em>Jurassic Park</em>, <em>Manhattan</em> et <em>Metropolis</em></span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La méthode illustrée ici montre tout d’abord
+une propriété importante, déja évoquée: <em>chaque bloc de l’arbre B
+(sauf la racine) est au moins à moitié plein</em>. C’est une propriété
+obtenue par construction: un éclatement n’intervient que quand
+un bloc est plein, cet éclatement répartit les entrées en deux sous-ensembles
+de taille égale, et les deux blocs résultant d’un éclatement sont donc
+à moitié plein, avant de recevoir de nouvelles entrées avec les insertions
+ultérieures. On constate en pratique que le taux de remplissage est d’environ 70%.</p>
+<p>La seconde remarque importante tient à l’aspect dynamique de la construction, illustrée
+ici. Une insertion dans un arbre B peut déclencher des réorganisations qui restent <em>locales</em>,
+en d’autres termes elles n’affectent qu’un partie minimale de la structure globale. C’est ce
+qui rend l’évolution de l’index fluide, sans nécessité d’introduire une coûteuse opération
+périodique de réorganisation globale.</p>
+</section>
+<section id="recherches-avec-un-arbre-b">
+<h3>Recherches avec un arbre-B<a class="headerlink" href="#recherches-avec-un-arbre-b" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’arbre B supporte des opérations de recherche par clé, par
+préfixe de la clé et par intervalle.</p>
+<section id="recherche-par-cle">
+<h4>Recherche par clé<a class="headerlink" href="#recherche-par-cle" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Prenons l’exemple suivant:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>  <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Manhattan&#39;</span>
+</pre></div>
+</div>
+<p>En l’absence d’index, la seule solution est de parcourir le fichier.
+Dans l’exemple de la  <a class="reference internal" href="#arbreb-6"><span class="std std-numref">Fig. 3.11</span></a>, cela implique de
+lire inutilement
+10 films avant de trouver <em>Manhattan</em> qui est en onzième position.
+L’index permet de trouver l’enregistrement beaucoup plus rapidement.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on lit la racine de l’arbre: <em>Manhattan</em> étant situé dans
+l’ordre lexicographique entre <em>Easy Rider</em> et <em>Psychose</em>,
+on doit suivre le chaînage situé entre ces deux titres;</p></li>
+<li><p>on lit le bloc interne intermédiaire:  la feuille contenant <em>Manhattan</em> est dans l’arbre
+situé à gauche de l’entrée d’index  <em>Manhattan</em>, on suit donc le chaînage de gauche;</p></li>
+<li><p>on lit le bloc feuille dans lequel on trouve
+l’entrée <em>Manhattan</em> contenant l’adresse de l’enregistrement
+dans le fichier des données;</p></li>
+<li><p>il reste à lire l’enregistrement.</p></li>
+</ul>
+</div></blockquote>
+<p>Donc quatre lectures sont suffisantes: trois dans l’index, une dans
+le fichier de données. Plus généralement, le nombre
+de lectures (logiques) nécessaires pour une recherche par clé est égal
+au nombre de niveaux de l’arbre, plus une lecture (logique) pour accéder
+au fichier de données.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Ce sont des lectures <em>logiques</em> par opposition aux lectures
+<em>physiques</em> qui impliquent un accès disque. En pratique, un index
+souvent utilisé réside en mémoire, et le parcours est très rapide.</p>
+</div>
+<p>Prenons le cas plus réaliste de notre fichier avec un million de film. Nous
+avons déjà calculé qu’il était possible de l’indexer avec un arbre B   à trois
+niveaux.
+Quatre lectures (trois pour l’index, un
+pour l’enregistrement) suffisent pour une recherche
+par clé, alors qu’il faudrait parcourir
+les 300 000 blocs d’un fichier en l’absence d’index.</p>
+<p>Le coût d’une recherche par clé étant proportionnel au nombre de niveaux
+et pas au nombre d’enregistrements, l’indexation permet
+d’améliorer les temps de recherche de manière vraiment
+considérable.  La création d’un index peut faire passer
+le temps de réponse dune requête de quelques secondes ou dizaines
+de secondes à quelques micro secondes.</p>
+</section>
+<section id="recherche-par-intervalle">
+<h4>Recherche par intervalle<a class="headerlink" href="#recherche-par-intervalle" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Un arbre-B permet également d’effectuer des recherches
+par intervalle.
+Le principe est simple: on effectue une recherche par clé pour
+la borne inférieure de l’intervalle. On obtient la feuille
+contenant cette borne inférieure. Il reste à parcourir les feuilles
+de l’arbre, grâce
+au chaînage des feuilles,  jusqu’à ce que la borne supérieure
+ait été rencontrée ou dépassée. Voici une recherche
+par intervalle:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>  <span class="n">Film</span>
+<span class="k">where</span> <span class="n">annee</span> <span class="k">between</span> <span class="mi">1960</span> <span class="k">and</span> <span class="mi">1975</span>
+</pre></div>
+</div>
+<p>On peut utiliser l’index sur les années (<a class="reference internal" href="#arbrebannees"><span class="std std-numref">Fig. 3.5</span></a>)  pour  répondre à cette requête.
+Tout d’abord on fait une recherche par clé pour l’année 1960. On accède
+alors à la seconde feuille  dans laquelle
+on trouve la valeur 1960 associée à l’adresse du film
+correspondant (<em>Psychose</em>) dans le fichier des données.</p>
+<p>On parcourt ensuite les feuilles en suivant le chaînage indiqué
+en pointillés. On accède ainsi
+successivement aux valeurs 1969, 1977 (dans la troisième feuille)
+puis 1979. Arrivé à ce point, on sait que toutes les valeurs
+suivantes seront supérieures à 1979 et qu’il n’existe donc pas
+de film paru en 1975 dans la base de données. Toutes les adresses
+des films constituant le résultat de la requête ont été récupérées:
+il reste à lire les enregistrements dans le fichier des données.</p>
+<p>C’est ici que les choses se gâtent: jusqu’à présent chaque
+lecture d’un bloc de l’index ramenait un ensemble
+d’entrées pertinentes pour la recherche. Autrement dit
+on bénéficiait du « bon » regroupement des entrées:
+les clés de valeurs proches – donc susceptibles d’être
+recherchées ensembles – sont proches
+dans la structure. Dès qu’on accède au fichier
+de données ce n’est plus vrai puisque ce fichier
+n’est pas organisé de manière à regrouper les
+enregistrements ayant des valeurs de clé proches.</p>
+<p>Dans le pire des cas, comme nous l’avons souligné
+déjà pour les index simples, il peut y avoir
+une lecture de bloc pour chaque lecture d’un
+enregistrement. L’accès aux données est alors de loin
+la partie la plus pénalisante de la recherche
+par intervalle, tandis que le parcours de l’arbre-B
+peut être considéré comme néligeable.</p>
+</section>
+<section id="recherche-par-prefixe">
+<h4>Recherche par préfixe<a class="headerlink" href="#recherche-par-prefixe" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Enfin l’arbre-B est utile pour une recherche avec un préfixe de la clé:
+il s’agit en fait d’une variante des recherches par intervalle.
+Prenons l’exemple suivant:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>  <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="k">like</span> <span class="s1">&#39;M%&#39;</span>
+</pre></div>
+</div>
+<p>On veut donc tous les films dont le titre commence par “M”. Cela
+revient à faire une recherche par intervalle sur toutes les valeurs
+comprises, selon l’ordre lexicographique, entre le “M” (compris)
+et le “N” (exclus). Avec l’index, l’opération consiste
+à effectuer une recherche par clé avec la lettre “M”, qui mène
+à la seconde feuille ( <a class="reference internal" href="#arbreb-6"><span class="std std-numref">Fig. 3.11</span></a>) dans laquelle
+on trouve le film <em>Manhattan</em>. En suivant le chaînage des feuilles
+on trouve le film <em>Metropolis</em>, puis <em>Psychose</em>
+qui indique que la recherche est terminée.</p>
+<p>Le principe est généralisable à toute recherche qui peut s’appuyer sur
+la relation d’ordre qui est à la base de la construction d’un arbre B. En
+revanche une recherche sur un suffixe de la clé (« tous les films terminant
+par “S” ») ou en appliquant une fonction ne pourra pas tirer parti
+de l’index et sera exécutée par un parcours séquentiel.
+C’est le cas par exemple de la requête suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>  <span class="n">Film</span>
+<span class="k">where</span> <span class="n">titre</span> <span class="k">like</span> <span class="s1">&#39;%e&#39;</span>
+</pre></div>
+</div>
+<p>Ici on cherche tous les films dont le titre se finit
+par “e”. Ce critère n’est pas compatible avec la relation
+d’ordre qui est à la base de la construction de l’arbre,
+et donc des recherches qu’il supporte.</p>
+<p>Le temps d’exécution d’une requête avec index  peut s’avérer
+sans commune mesure avec celui d’une recherche sans index, et il est donc très
+important d’être conscient des situations où le SGBD pourra
+effectuer une recherche par l’index. Quand il y a un doute, on peut
+demander des informations sur la manière dont la requête
+est exécutée (le « plan d’exécution ») avec les outils
+de type « <code class="docutils literal notranslate"><span class="pre">explain</span></code> ». Nous y reviendrons dans le chapitre sur l’évaluation
+de requêtes.</p>
+</section>
+</section>
+<section id="creation-d-un-arbre-b">
+<h3>Création d’un arbre B<a class="headerlink" href="#creation-d-un-arbre-b" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Un arbre-B est créé sur une table, soit
+implicitement par la commande <code class="docutils literal notranslate"><span class="pre">create</span> <span class="pre">index</span></code>, soit explicitement
+avec l’option <code class="docutils literal notranslate"><span class="pre">primary</span> <span class="pre">key</span></code>. Voici les commandes classiques:
+la création de la table, avec création de l’index pour assurer
+l’unicité de la clé primaire.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Film</span> <span class="p">(</span><span class="n">titre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+                   <span class="p">...,</span>
+                   <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">titre</span><span class="p">)</span>
+                   <span class="p">);</span>
+</pre></div>
+</div>
+<p>Et la création d’un second index, non unique, sur l’année.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">index</span> <span class="n">filmAnnee</span> <span class="k">on</span> <span class="n">Film</span> <span class="p">(</span><span class="n">année</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>La création de l’index sur la clé primaire (et parfois sur la clé étrangère)
+est très utile pour vérifier la satisfaction des contraintes de clé ainsi que, nous
+le verrons, pour le calcul des jointures. Voir l’exercice <a class="reference internal" href="#ex-arbreb6">ex-arbreb6</a>.</p>
+</div>
+<p>Un SGBD
+relationnel effectue automatiquement les
+opérations nécessaires au maintien de la structure: insertions,
+destructions, mises à jour. Quand on insère un film, il y a donc
+également insertion d’une nouvelle valeur dans l’index des titres et
+dans l’index des années. Ces opérations peuvent être assez coûteuses,
+et la création d’un index, si elle optimise des
+opérations de recherche, est en contrepartie pénalisante pour les
+mises à jour.</p>
+</section>
+<section id="proprietes-de-l-arbre-b">
+<h3>Propriétés de l’arbre B<a class="headerlink" href="#proprietes-de-l-arbre-b" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’arbre B est une structure arborescente qui a les propriétés suivantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>l’arbre est <em>équilibré</em>, tous les chemins
+de la racine vers les feuilles ont la même longueur;</p></li>
+<li><p>chaque nœud (sauf la racine) est un bloc occupé au moins à 50%
+par des entrées de l’index;</p></li>
+<li><p>une recherche s’effectue par une simple traversée
+en profondeur de l’arbre, de la racine vers les feuilles;</p></li>
+</ul>
+</div></blockquote>
+<p>Le coût des opérations avec l’arbre B est
+est logarithmique dans la taille des données, alors qu’une recherche
+sans index est linéaire. Mais au-delà de cette analyse, l’important est
+que cela correspond, en pratique, à des gains de performance considérables.</p>
+<p>L’arbre B exploite bien l’espace, a de très bonnes performances, et
+se réorganise automatiquement et à coût minimal.
+Ces qualités expliquent qu’il soit systématiquement utilisé par tous les SGBD,
+notamment pour indexer la clé primaire des tables relationnelles.</p>
+</section>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Combien peut-on créer d’index en forme d’arbre B sur une table?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> un seul, car l’arbre B est non dense</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> deux, celui sur la clé primaire, et celui sur un autre attribut au choix</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> autant que l’on veut</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Indiquer quelles affirmations sont vraies</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  une entrée dans une feuille peut référencer une autre feuille</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  une entrée dans une feuille référence toujours un enregistrement du fichier de données</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  une entrée dans un nœud interne référence toujours une feuille</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  une entrée dans un nœud interne référence toujours un autre nœud interne</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  une entrée dans un nœud interne référence un bloc de l’arbre, feuille ou nœud interne</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Le chaînage des feuilles est utile pour (une seule réponse)</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  la procédure d’éclatement des feuilles</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  la procédure de recherche par intervalle</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  le maintien de la cohérence globale de l’arbre</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>La capacité maximale d’un bloc de mon arbre est de 10 entrées. Un
+bloc est toujours au moins à moitié plein (on va supposer que c’est vrai aussi pour la racine). Quel est le nombre
+d’enregistrements que je peux indexer avec un arbre à 2 niveaux?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  20 au mieux, 10 au pire</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  100 au mieux, 50 au pire</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  100 au mieux, 25 au pire</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  200 au mieux, 100 au pire</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>À propos de l’éclatement, que peut-on dire?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> tout éclatement entraîne l’ajout d’un niveau à l’arbre</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> un éclatement nécessite l’ajout d’au moins un bloc à l’arbre B</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> l’éclatement de la racine nécessite  l’ajout d’exactement 2 blocs</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> un éclatement déplace les enregistrements d’un bloc plein vers les blocs voisins</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Parmi les phrases suivantes, lesquelles décrivent correctement l’algorithme d’insertion
+d’une entrée dans un arbre B</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> on parcourt l’arbre à partir de la racine jusqu’à la feuille d’insertion</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on insère toujours dans la première feuille, et l’arbre se réorganise ensuite</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> on va directement à la feuille qui doit contenir la valeur de clé, et
+l’arbre peut alors grossir de bas en haut</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> on insère dans une feuille, et dans un bloc interne</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>La recherche pour une valeur de clé, dans un arbre B</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> s’effectue en suivant un unique chemin de la racine vers une feuille</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> s’effectue en parcourant séquentiellement les feuilles</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> s’effectue en trouvant le premier bloc, interne ou feuille, dont une entrée
+correspond à la valeur de la clé recherchée</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+<li><p>Quel est l’inconvénient d’une recherche par intervalle avec un arbre B</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="arbrebS2-8"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> elle entraîne des lectures aléatoires (non séquentielles) du niveau des feuilles</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> elle entraîne des lectures aléatoires (non séquentielles) des blocs du fichier de données</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> elle entraîne un balayage séquentiel d’une partie du fichier de données</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-dense-nondense-index-dense-ou-non-dense admonition" id="ex-dense-nondense">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-dense-nondense">ex-dense-nondense</a>: index dense ou non-dense</p>
+<blockquote>
+<div><p>Soit un fichier de données tel que chaque bloc peut contenir 10 enregistrements. On indexe
+ce fichier avec un niveau d’index, et on suppose qu’un bloc d’index contient 100
+entrées <em>[valeur, adresse]</em>.</p>
+<p>Si <em>n</em> est le nombre d’enregistrements, donnez le nombre minimum de blocs
+en fonction de <em>n</em> pour un index dense et un index non-dense.</p>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Le fichier est constitué d’au moins <span class="math notranslate nohighlight">\(\frac{n}{10}\)</span> blocs.
+Un index dense contient <em>n</em> entrées et occupe donc <span class="math notranslate nohighlight">\(\frac{n}{100}\)</span>
+blocs.  Pour un index non-dense il faut seulement <span class="math notranslate nohighlight">\(\frac{n}{10}\)</span> entrées
+donc <span class="math notranslate nohighlight">\(\frac{n}{1000}\)</span> blocs.</p>
+</div>
+</div>
+<div class="admonition-exercice-ex-construction-construction-d-un-arbre-b admonition" id="ex-construction">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-construction">ex-construction</a>: construction d’un arbre B</p>
+<blockquote>
+<div><p>Soit la liste des départements suivants, à lire de gauche à droite et de haut  en bas.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>3  Allier; 36 Indre; 18 Cher; 75 Paris
+39 Jura; 9  Ariège; 81 Tarn; 11 Aude
+12 Aveyron; 25 Doubs; 73 Savoie; 55 Meuse;
+15 Cantal; 51 Marne; 42 Loire; 40 Landes
+14 Calvados; 30 Gard; 84 Vaucluse; 7 Ardèche
+</pre></div>
+</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Construire, en prenant comme clé le numéro de département,
+un index dense à deux niveaux sur le fichier  contenant les enregistrements
+dans l’ordre indiqué ci-dessus, en supposant 2 enregistrements par bloc
+pour les données, et 8 par bloc pour l’index.</p></li>
+<li><p>Construire un index non-dense sur le fichier trié
+par numéro, avec les mêmes hypothèses.</p></li>
+<li><p>Construire un arbre-B sur les numéros de département, en supposant
+qu’il y a au plus 4 entrées par bloc dans l’index, et en insérant
+les enregistrements dans l’ordre donné ci-dessus.</p></li>
+<li><p>Construire un arbre-B sur les noms de département, en supposant
+qu’il y a au plus 4 entrées par bloc dans l’index, et en insérant
+les enregistrements dans l’ordre donné ci-dessus.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Voir la <a class="reference internal" href="#construct1"><span class="std std-numref">Fig. 3.12</span></a>. Notez que deux entrées proches dans l’index (3 et 7) peuvent
+référencer des enregistrements très distincts</p>
+<figure class="align-center" id="id13">
+<span id="construct1"></span><a class="reference internal image-reference" href="_images/ConstructArbreB-1.png"><img alt="_images/ConstructArbreB-1.png" src="_images/ConstructArbreB-1.png" style="width: 90%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.12 </span><span class="caption-text">L’index dense à deux niveaux.</span><a class="headerlink" href="#id13" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La <a class="reference internal" href="#construct2"><span class="std std-numref">Fig. 3.13</span></a> montre l’arbre B sur les numéros, après l’insertion du 42. Le complément
+est laissé à titre d’exercice. Les différents types de pointeurs sont montrés avec des graphies
+distinctes: trait plein pour le liens entre niveaux, trtait plein, tête blanche
+pour les liens des feuilles, traits pointillés pour les liens entre index et données.</p>
+<figure class="align-center" id="id14">
+<span id="construct2"></span><a class="reference internal image-reference" href="_images/ConstructArbreB-2.png"><img alt="_images/ConstructArbreB-2.png" src="_images/ConstructArbreB-2.png" style="width: 95%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 3.13 </span><span class="caption-text">L’arbre B sur les numéros (jusqu’au 42, à compléter)</span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="admonition-exercice-ex-arbreb1-proprietes-d-un-arbre-b admonition" id="ex-arbreb1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb1">ex-arbreb1</a>: propriétés d’un arbre B</p>
+<blockquote>
+<div><p>Soit un fichier de 1 000 000 enregistrements répartis
+en blocs de 4 096 octets. Chaque enregistrement fait 45 octets et il n’y a pas
+de chevauchement de blocs. Répondez aux questions suivantes en justifiant
+vos réponses (on suppose que les blocs  sont pleins).</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Combien faut-il de blocs? Quelle est la taille du fichier?</p></li>
+<li><p>Quelle est la taille d’un index de type arbre-B si la clé fait 32 octets
+et une adresse 8 octets? Détaillez le calcul niveau par niveau.</p></li>
+<li><p>Même question si la clé fait 4 octets.</p></li>
+<li><p>Si on suppose qu’une lecture coûte 10 ms, quel est le coût moyen d’une recherche
+d’un enregistrement par clé unique, avec index et sans index dans le pire des cas?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-arbreb2-hauteur-et-efficacite-d-un-arbre-b admonition" id="ex-arbreb2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb2">ex-arbreb2</a>: hauteur et efficacité d’un arbre B</p>
+<blockquote>
+<div><p>On reprend les hypothèses précédentes, et on indexe maintenant le fichier
+avec un arbre-B dont chaque bloc peut contenir au maximum 100 entrées.
+Les feuilles de l’arbre contiennent  des entrées référençant
+des enregistrements dans   le fichier, et les nœuds internes
+contiennent des entrées référençant d’autres nœuds.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Quel est l’ordre de cet arbre B et quel est sa hauteur théorique obtenue
+par la formule donnée en cours?</p></li>
+<li><p>On suppose maintenant
+qu’un bloc d’arbre B est plein à 70% et contient donc 70 entrées pour un fichier de 1 000 000 d’enregistrements.
+En effectuant un calcul niveau par niveau, donnez (1) le nombre de blocs du niveau des feuilles,
+(2) le nombre minimal de blocs utilisés par la fichier et l’index, (3)
+le nombre de niveaux de l’arbre ,
+(4) le nombre
+de lectures  pour rechercher un enregistrement par sa clé.</p></li>
+<li><p>On effectue maintenant une recherche par intervalle ramenant 1 000 enregistrements.
+Décrivez la recherche et donnez le nombre de lectures dans le pire des cas.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>L’ordre de cet arbre B est 50. En appliquant la formule <span class="math notranslate nohighlight">\(\lceil log_{50} (10^6) \rceil\)</span>
+on trouve une hauteur théorique de 4.</p></li>
+<li><p>Le niveau des feuilles de l’arbre B
+indexe un million d’enregistrements, il est donc stocké sur <span class="math notranslate nohighlight">\(\lceil  \frac{10^6}{70} \rceil  = 14 286\)</span>
+blocs. Le niveau indexant les feuilles est non dense et contient
+donc 14 286 entrées qui sont stockées (toujours à 70 entrées par nœud) dans 204
+blocs. Il faut encore 3 blocs au niveau supérieur, et 1 bloc pour la racine.
+Il y a donc <span class="math notranslate nohighlight">\(14\,286+204+3+1\)</span> blocs dans l’arbre B` plus au moins 100 000 blocs
+de données.</p>
+<p>On trouve bien 4 niveaux d’index. Il faut donc lire 4+1 blocs pour accéder à un enregistrement par sa clé.</p>
+</li>
+<li><p>Pour une recherche par intervalle on parcourt d’abord
+l’arbre jusqu’à trouver l’entrée au niveau des feuilles qui correspond
+à la borne inférieure de l’intervalle (4 blocs à lire). Il faut
+ensuite lire 1 000 entrées, soit  <span class="math notranslate nohighlight">\(\lceil \frac{1000}{70} \rceil = 15\)</span> blocs
+en parcourant le niveau des feuilles de l’arbre. Pour chaque adresse des 1 000 entrées
+il faut lire un bloc dans le pire des cas, soit 1 000 blocs. Total: 1018 blocs.
+Le coût (théorique) des accés aléatoires au fichier de données est le plus pénalisant.</p></li>
+</ul>
+</div>
+</div>
+<div class="admonition-exercice-ex-arbreb3-encore-des-calculs-sur-l-arbre-b admonition" id="ex-arbreb3">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb3">ex-arbreb3</a>: encore des calculs sur l’arbre B</p>
+<blockquote>
+<div><p>Un arbre B indexe un fichier de 300 enregistrements.</p>
+<p>Dans un premier temps, on suppose que l’ordre de l’arbre est de 5. Chaque nœud
+stocke donc au plus 10 entrées. Quelle est la hauteur minimale de l’arbre et sa hauteur maximale?
+(Un arbre  constitué uniquement de la racine a pour hauteur 0).</p>
+<p>Inversement, on ignore l’ordre de l’arbre mais
+on constate qu’il a deux niveaux. Quel est l’ordre maximal compatible avec cette constatation?
+Et l’ordre minimal?</p>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-arbreb4-indexation-des-sequences admonition" id="ex-arbreb4">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb4">ex-arbreb4</a>:  indexation des séquences</p>
+<blockquote>
+<div><p>On indexe une table par un arbre B+ sur un identifiant
+dont les valeurs sont fournies par une <em>séquence</em>. À
+chaque insertion un compteur est incrémenté et fournit la valeur
+de clé de l’enregistrement inséré.</p>
+<p>On suppose qu’il n’y a que des insertions dans la table. Montrez
+que tous les nœuds de l’index qui ont un  frère droit
+sont exactement à moitié pleins.</p>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Au moment d’un éclatement, on se retrouve avec deux blocs
+remplis à moitié. Celui qui a un frère droit ne contient que
+des valeurs de clés inférieures à celui de ce frère droit.
+Comme on n’insère que des valeurs supérieures à toutes celles
+existantes, un nœud qui a un frère droit ne sera jamais modifié.</p>
+</div>
+</div>
+<div class="admonition-exercice-ex-arbreb5-index-ou-parcours-sequentiel admonition" id="ex-arbreb5">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb5">ex-arbreb5</a>:  index ou parcours séquentiel?</p>
+<blockquote>
+<div><p>Soit un fichier non trié contenant <em>n</em>  enregistrements
+de 81 octets chacun. Il est indexé par un arbre-B, comprenant 3 niveaux,
+chaque entrée dans l’index occupant 20 octets. On utilise des blocs de 4 096 octets,
+sans entête, et on suppose qu’ils sont remplis à 100% pour le fichier et à 70% pour l’index.</p>
+<p>On veut effectuer une recherche par intervalle dont on estime qu’elle va ramener <em>m</em>
+enregistrements. On suppose que tous les blocs sont lus sur le disque pour un coût uniforme.</p>
+<blockquote>
+<div><ul>
+<li><p>Donnez la fonction de <em>n</em> et <em>m</em> exprimant le  nombre de lectures à effectuer pour cette recherche
+avec un parcours séquentiel.</p></li>
+<li><p>Donnez la fonction exprimant le  le nombre de lectures à effectuer en utilisant l’index.</p></li>
+<li><p>À partir de quelle valeur de <em>m</em> la recherche séquentielle
+devient-elle préférable à l’utilisation de l’index,
+en supposant un temps d’accès uniforme pour chaque bloc?</p>
+<p>En déduire le pourcentage d’enregistrements concernés par la recherche à partir duquel
+le parcours séquentiel est préférable. On pourra simplifier les équations en
+éliminant les facteurs qui deviennent   négligeables pour des grandes valeurs de <em>n</em>
+et de <em>m</em>.</p>
+</li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Nombre d’enregistrements dans chaque bloc: <span class="math notranslate nohighlight">\(\lfloor 4096/81 \rfloor = 50\)</span>.
+Nombre de blocs du fichier:  <span class="math notranslate nohighlight">\(\lceil \frac{n}{50} \rceil\)</span>. Il faut lire
+tout le fichier pour une recherche par intervalle.</p></li>
+<li><p>Pour une rercherche avec l’index, il faut lire la racine de l’arbre,
+puis un bloc du niveau intermédiaire, avant d’arriver à la feuille contenant
+l’adresse de la borne inférieure de l’intervalle.
+Il faut alors tenir compte du nombre d’entrées par bloc de l’arbre-B,
+égal en moyenne, d’après l’énoncé, à <span class="math notranslate nohighlight">\(0,7 \times \lfloor 4096/20 \rfloor = 143\)</span>.
+Il faudra donc parcourir un nombre de feuilles de l’arbre égal à
+<span class="math notranslate nohighlight">\(\lceil m / 143 \rceil\)</span> et pour chaque adresse rencontrée aller lire
+le bloc correspondant dans le fichier de données. On en déduit
+le nombre de lectures nécessaires:</p>
+<div class="math notranslate nohighlight">
+\[2 +  \lceil \frac{m}{143} \rceil + m\]</div>
+</li>
+<li><p>Avec l’hypothèque d’un temps de lecture uniforme des blocs,
+il vaut mieux utiliser une lecture séquentielle quand  le nombre de blocs à
+lire en passant par l’index est supérieur à la taille du fichier, soit:</p>
+<div class="math notranslate nohighlight">
+\[\lceil \frac{n}{50} \rceil &lt; 2 +  \lceil \frac{m}{143} \rceil + m\]</div>
+<p>Pour une grande valeur <em>a</em>, on va poser <span class="math notranslate nohighlight">\(\lceil a \rceil = a\)</span>, cela simplifie
+l’équation:</p>
+<div class="math notranslate nohighlight">
+\[\frac{n}{50} &lt; 2 +  \frac{m}{143}  + m\]</div>
+<p>Soit <span class="math notranslate nohighlight">\(m &gt; \frac{1}{1 + 1/143} \times (\frac{n}{50} - 2)\)</span>.
+On pose <span class="math notranslate nohighlight">\(m = p \times n\)</span> où <em>p</em> est le pourcentage
+d’enregistrements ramenés par la recherche. On a donc:</p>
+<div class="math notranslate nohighlight">
+\[p &gt; \frac{1}{1 + 1/143} \times (\frac{1}{50} - \frac{2}{n})\]</div>
+<p>Pour une valeur de <em>n</em> élevée, le facteur <em>2/n</em> (correspondant à la
+descente dans l’arbre) devient négligeable. On peut également
+ignorer <span class="math notranslate nohighlight">\(\frac{1}{143}\)</span> qui correspond au parcours des feuilles
+de l’arbre. Bref: le parcours de l’index compte pour peu de choses,
+les accès aléatoires au fichier étant prépondérants. On constate qu’au-delà de
+2% des enregistrements ramenés par une recherche, un parcours séquentiel
+est préférable.</p>
+<p>C’est un calcul instructif même s’il s’appuie sur des hypothèses
+très simplificatrices. En pratique le placement dans un cache des blocs du
+fichier de données
+réduit l’effet de dispersion des lectures aléatoires engendrées par le
+parcours d’index. Mais en contrepartie la lecture séquentielle du fichier
+de données est bien plus efficace qu’une série d’accès
+aléatoires.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="admonition-exercice-ex-arbreb6-utilite-des-index-sur-les-cles-primaires-et-etrangeres admonition" id="ex-arbreb6">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb6">ex-arbreb6</a>:  utilité des index sur les clés primaires et étrangères</p>
+<blockquote>
+<div><p>Soit les deux tables suivantes:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">R</span> <span class="p">(</span><span class="n">idR</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+          <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">idR</span><span class="p">));</span>
+
+<span class="k">create</span> <span class="k">table</span> <span class="n">S</span> <span class="p">(</span><span class="n">idS</span> <span class="nb">int</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+        <span class="n">idR</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+          <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">idS</span><span class="p">),</span>
+         <span class="k">foreign</span> <span class="k">key</span> <span class="n">idR</span> <span class="k">references</span> <span class="n">R</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Indiquez, pour les ordres SQL suivants, quels index peuvent améliorer les performances
+ou optimiser la  vérification des contraintes <code class="docutils literal notranslate"><span class="pre">primary</span> <span class="pre">key</span></code> et <code class="docutils literal notranslate"><span class="pre">foreign</span> <span class="pre">key</span></code>.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">R</span> <span class="k">where</span> <span class="n">idR</span> <span class="o">=</span> <span class="s1">&#39;Bou&#39;</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">R</span> <span class="k">where</span> <span class="n">idR</span> <span class="k">like</span> <span class="s1">&#39;B%&#39;</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">R</span> <span class="k">where</span> <span class="k">length</span><span class="p">(</span><span class="n">idR</span><span class="p">)</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">R</span> <span class="k">where</span> <span class="n">idR</span> <span class="k">like</span> <span class="s1">&#39;_ou&#39;</span>
+<span class="k">insert</span> <span class="k">into</span> <span class="n">S</span> <span class="k">values</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;Bou&#39;</span><span class="p">)</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">S</span> <span class="k">where</span> <span class="n">idS</span> <span class="k">between</span> <span class="mi">10</span> <span class="k">and</span> <span class="mi">20</span>
+<span class="k">delete</span> <span class="k">from</span> <span class="n">R</span> <span class="k">where</span> <span class="n">idR</span> <span class="k">like</span> <span class="s1">&#39;Z%&#39;</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">3. Structures d’index: l’arbre B</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-indexation-de-fichiers">S1: Indexation de fichiers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#structure-et-contenu-des-index">Structure et contenu des index</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#comment-chercher-avec-un-index">Comment chercher avec un index</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#index-non-dense">Index non-dense</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#index-dense">Index dense</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#index-multi-niveaux">Index multi-niveaux</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-l-arbre-b">S2: L’arbre-B</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#structure-de-l-arbe-b">Structure de l’arbe B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#construction-de-l-arbre-b">Construction de l’arbre B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recherches-avec-un-arbre-b">Recherches avec un arbre-B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creation-d-un-arbre-b">Création d’un arbre B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proprietes-de-l-arbre-b">Propriétés de l’arbre B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="stock.html" title="2. Dispositifs de stockage"
+             >précédent</a> |
+          <a href="hachage.html" title="4. Structures d’index: le hachage"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;3. &lt;/span&gt;Structures d’index: l’arbre B</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

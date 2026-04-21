@@ -1,0 +1,1078 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>11. Reprise sur panne &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="12. Annales des examens" href="annales.html" />
+    <link rel="prev" title="10. Contrôle de concurrence" href="conc.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;11. &lt;/span&gt;Reprise sur panne</a></div>
+        <div class="rel">
+          <a href="conc.html" title="10. Contrôle de concurrence"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="annales.html" title="12. Annales des examens"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="reprise-sur-panne">
+<span id="chap-rp"></span><h1><span class="section-number">11. </span>Reprise sur panne<a class="headerlink" href="#reprise-sur-panne" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Ce chapitre est consacré aux principes de la
+reprise sur panne dans les SGBD. La reprise sur panne consiste, comme son nom
+l’indique, à assurer que le système est capable, après une panne,
+de récupérer <em>l’état de la base</em> au moment où la panne est
+survenue. Le terme de panne désigne ici tout événement
+qui affecte le fonctionnement du processeur ou de la mémoire
+principale. Il peut s’agir par exemple d’une coupure électrique
+interrompant le serveur de données, d’une défaillance logicielle,
+ou des pannes affectant les disques
+Par souci de simplicité on va distinguer deux types de panne (quelle
+que soit la cause).</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Panne légère</em>: affecte la RAM du serveur de données, pas les disques</p></li>
+<li><p><em>Panne lourde</em>: affecte un disque</p></li>
+</ul>
+</div></blockquote>
+<p>La problématique de la reprise sur panne est à
+rapprocher de la garantie de durabilité pour les transactions. Il
+s’agit d’assurer que même en cas
+d’interruption à <em>t+1</em>, on retrouvera la situation issue
+des transactions validées.</p>
+<p>La première section discute de l’impact de l’architecture
+sur les techniques de reprise sur panne.
+Ces techniques
+sont ensuite développées dans les sections suivantes.</p>
+<div class="admonition-vocabulaire admonition">
+<p class="admonition-title">Vocabulaire</p>
+<p>Dans ce qui suit, on utilise le vocabulaire suivant:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>un <em>enregistrement</em> est la représentation d’une entité applicative
+mise à jour de manière atomique;  dans le contexte d’une base relationnele,
+un enregistrement correspond à la représentation physique d’une ligne;</p></li>
+<li><p>on s’autorise l’anglicisme  <em>mémoire cache</em> ou simplement <em>cache</em> pour désigner la mémoire tampon;</p></li>
+<li><p>enfin le <em>bloc</em> est l’unité d’échange entre la mémoire volatile et le disque; un bloc
+contient en général plusieurs enregistrements.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<section id="s1-introduction">
+<h2>S1: introduction<a class="headerlink" href="#s1-introduction" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrpintro.pdf">Diapositives: introduction</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/reprise_sur_panne_introduction.22489">Vidéo d’introduction</a></p></li>
+</ul>
+</div>
+<section id="l-etat-de-la-base">
+<h3>L’état de la base<a class="headerlink" href="#l-etat-de-la-base" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Commençons par définir une première notion très importante, <em>l’état de la base</em>.</p>
+<div class="admonition-definition-l-etat-de-la-base admonition">
+<p class="admonition-title">Définition: l’état de la base?</p>
+<p>On définit l’état de la base à un instant <em>t</em> commme
+l’état résultant de l’ensemble des transactions validées à l’instant
+<em>t</em>.</p>
+</div>
+<p>Pour assurer sécurité des données (face à une panne légère au moins), il est impératif que l’état de la base soit
+stocké sur support persistant, à tout instant. Une première règle simple est donc:</p>
+<div class="admonition-regle-1 admonition">
+<p class="admonition-title">Règle 1</p>
+<p>L’état de la base doit toujours être stocké sur disque</p>
+</div>
+<p>Pour le dire autrement, aucune donnée validée ne devrait être en mémoire RAM et pas sur le disque,
+car elle serait perdue en cas de panne.</p>
+</section>
+<section id="garanties-transactionnelles">
+<h3>Garanties transactionnelles<a class="headerlink" href="#garanties-transactionnelles" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Souvenons-nous maintenant des propriétés des transactions.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Durabilité (et atomicité)</em>: quand le système rend la main après un <code class="docutils literal notranslate"><span class="pre">commit</span></code> (<em>acquittement</em>),
+<em>toutes</em> les modifications de la transaction intègrent l’état de la base et deviennent  <em>permanentes</em>.</p></li>
+<li><p><em>Recouvrabilité (et atomicité)</em>: tant qu’un <code class="docutils literal notranslate"><span class="pre">commit</span></code> n’a pas eu lieu,
+<em>toutes</em> les modifications de la transaction doivent pouvoir être <em>annulées</em>
+par un <code class="docutils literal notranslate"><span class="pre">rollback</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<p>Nous avons déjà rencontré les notions de versions d’un nuplet en cours d’exécution d’une transaction,
+et nous les avons appelées <em>image avant</em> et <em>image après</em>. Rappelons leur définition:</p>
+<div class="admonition-definition-image-avant-et-image-apres admonition">
+<p class="admonition-title">Définition: image avant et image après</p>
+<p><em>L’image après</em> d’une transaction <span class="math notranslate nohighlight">\(T\)</span>  désigne la nouvelle valeur des nuplets modifiés
+par <span class="math notranslate nohighlight">\(T\)</span>. <em>L’image avant</em> désigne  l’ancienne valeur de ces nuplets (<em>avant</em> modification).</p>
+</div>
+<p>L’exécution d’une transaction peut donc se décrire de la manière suivante, illustrée
+par la <a class="reference internal" href="#rp-problematique"><span class="std std-numref">Fig. 11.1</span></a>. Au départ, l’état de la base est stocké sur disque. Une partie
+de cet état correspond à l’image avant des nuplets qui vont être modifiés par la
+transaction. Au cours de la transaction, l”<em>image après</em> est constituée, et la transaction
+a, à chaque instant, deux possibilités:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>un <code class="docutils literal notranslate"><span class="pre">commit</span></code>, et l’image après remplace l’image avant dans l’état de la base;</p></li>
+<li><p>un <code class="docutils literal notranslate"><span class="pre">rollback</span></code>, et l’état de la base est restauré comme initialement, avec l’image avant.</p></li>
+</ul>
+</div></blockquote>
+<figure class="align-center" id="id6">
+<span id="rp-problematique"></span><a class="reference internal image-reference" href="_images/rp-problematique.png"><img alt="_images/rp-problematique.png" src="_images/rp-problematique.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.1 </span><span class="caption-text">Problématique de la reprise sur panne en termes d’état de la base, image avant et image après.</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le moment où la transaction effectue un  <code class="docutils literal notranslate"><span class="pre">commit</span></code> ou un <code class="docutils literal notranslate"><span class="pre">rollback</span></code> est crucial. Chacune
+de ces instructions est « acquitté » quand le serveur de données rend la main au processus client.
+Pour garantir le <code class="docutils literal notranslate"><span class="pre">commit</span></code>, la condition suivante doit être respectée.</p>
+<div class="admonition-regle-2 admonition">
+<p class="admonition-title">Règle 2</p>
+<p>L’image après doit    être sur le disque avant l’acquittement du <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p>
+</div>
+<p>Si ce n’était pas le cas et qu’une panne survienne juste après l’acquittement, mais avant
+l’écriture de l’image après sur le disque, cette dernière serait en partie ou totalement perdue,
+et la garantie de durabilité ne serait pas assurée.</p>
+<p>Maintenant, pour garantir le <code class="docutils literal notranslate"><span class="pre">rollback</span></code>, il faut pouvoir trouver sur le disque,
+après une panne, les données modifiées par la transaction dans l’état où elles
+étaient au moment où la transaction a débuté. La condition suivante doit être respectée.</p>
+<div class="admonition-regle-3 admonition">
+<p class="admonition-title">Règle 3</p>
+<p>L’image avant doit  être sur le disque jusqu`à  l’acquittement du <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p>
+</div>
+<p>On peut résumer la difficulté ainsi: jusqu’au <code class="docutils literal notranslate"><span class="pre">commit</span></code>, c’est <em>l’image avant</em> qui
+fait partie de l’état de la base. Au <code class="docutils literal notranslate"><span class="pre">commit</span></code>,  <em>l’image après</em> remplace
+<em>l’image avant</em>  dans l’état de la base. Il faut assurer que ce remplacement
+s’effectue de manière <code class="docutils literal notranslate"><span class="pre">atomique</span></code> (« tout ou rien »)? La suite montre que ce n’est pas facile.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Une panne légère est une panne qui affecte :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="rp1-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La mémoire persistante.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> La mémoire volatile.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Quels sont les liens entre la reprise sur panne (RP) et les propriétés transactionnelles présentées dans les chapitres précédents ?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="rp1-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La RP garantit qu’il est toujours possible de conclure une transaction.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> La RP garantit que les mises à jour d’une transaction validée (commit) sont toujours permanentes.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  La RP garantit qu’une transaction est remise, après une panne, au point où elle était avant la panne.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Indiquez, parmi les affirmations suivantes, celles qui sont <strong>incorrectes</strong> :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="rp1-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’état de la base est constitué de toutes les images après des transactions.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image avant a fait partie de l’état de la base, à un instant donné.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après intègre l’état de la base au moment du <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Si une transaction doit être annulée, le système annule l’image après pour revenir à l’image avant.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Une transaction T débutant à t0 et s’exécutant en isolation totale voit à un instant <em>t</em> :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="rp1-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  L’état de la base à t0.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Une instance constituée de l’état de la base à t0, affectée des modifications effectuées seulement par T jusqu’à l’instant t.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Une instance constituée de l’état de la base à t0, affectée des modifications effectuées seulement par T jusqu’à l’instant t
+et des modifications effectuées par toutes les transactions ayant validé à l’instant t.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</section>
+</section>
+<section id="s2-mise-a-jour-differee-immediate-et-opportuniste">
+<h2>S2: mise à jour différée, immédiate et opportuniste<a class="headerlink" href="#s2-mise-a-jour-differee-immediate-et-opportuniste" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrparchi.pdf">Diapositives: architecture</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/lectures_et_ecritures_buffer_et_disque.22493">Vidéo sur l’architecture</a></p></li>
+</ul>
+</div>
+<p>Pour bien comprendre les mécanismes utilisés, il faut
+avoir en tête l’architecture générale d’un serveur de données
+en cours de fonctionnement, et se souvenir que la
+performance d’un système est fortement liée au nombre
+de lectures/écritures qui doivent être effectuées. La reprise
+sur panne, comme les autres techniques mises en œuvre dans
+un SGBD, vise à minimiser ces entrées/sorties.</p>
+<p>La  <a class="reference internal" href="#buffer-disque-rp"><span class="std std-numref">Fig. 11.2</span></a> rappelle
+les composants d’un SGBD qui interviennent dans la
+reprise sur panne. On distingue la mémoire stable ou <em>persistante</em> (les
+disques) qui survit à une panne légère de type électrique
+ou logicielle, et la mémoire instable ou <em>volatile</em> qui est irrémédiablement
+perdue en cas, par exemple, de panne électrique.</p>
+<figure class="align-center" id="id7">
+<span id="buffer-disque-rp"></span><a class="reference internal image-reference" href="_images/buffer-disque.png"><img alt="_images/buffer-disque.png" src="_images/buffer-disque.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.2 </span><span class="caption-text">Le <em>cache</em> et le disque, ressources mémoires allouées au SGBD</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Or, pour des raisons de performance, le
+serveur de données cherche à limiter les accès aux disques,
+et s’appuie sur une mémoire tampon (<em>buffer</em> ou <em>cache</em> en anglais)
+qui stocke, en mémoire principale
+(donc instable) les blocs de données provenant des fichiers stockés
+sur disque. Que ce soit en lecture ou en écriture, le serveur
+va chercher à  s’appuyer sur la mémoire tampon.</p>
+<figure class="align-center" id="id8">
+<span id="write-naif"></span><a class="reference internal image-reference" href="_images/write-naif.png"><img alt="_images/write-naif.png" src="_images/write-naif.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.3 </span><span class="caption-text">Mise à jour dans le <em>cache</em>: faut-il écrire sur le disque ou pas?</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Pour les écritures (cas qui nous intéresse ici), le serveur
+recherche tout d’abord si l’enregistrement est dans le <em>cache</em>.
+Si oui,  la modification a lieu en mémoire, sinon le bloc
+contenant l’enregistrement est chargé du disque vers le cache,
+ce qui ramène au cas précédent.</p>
+<p>Un bloc placé dans le cache et non modifié est l’image exacte
+du bloc correspondant sur le disque.
+Quand une transaction vient modifier un enregistrement
+dans un bloc, son image en mémoire (l’image  après)  devient différente de celle sur le disque
+(l’image  avant). La  <a class="reference internal" href="#write-naif"><span class="std std-numref">Fig. 11.3</span></a> illustre
+la situation pour le bloc <span class="math notranslate nohighlight">\(B_v\)</span>.</p>
+<p>La question qui se pose alors, par rapport à la reprise sur panne,
+est de savoir quand il faut écrire un bloc modifié, et l’imopact qu’à
+cette stratégie d’écriture sur la gestion de la reprise. Nous allons
+étudier trois possibilités: écriture immédiate, écriture différée,
+et écriture opportuniste.</p>
+<section id="ecritures-immediates">
+<h3>Ecritures immédiates<a class="headerlink" href="#ecritures-immediates" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La stratégie d’écriture immédiate synchronise un bloc modifié avec son image dans le cache
+dès qu’une mise à jour est effectuée (<a class="reference internal" href="#write-immediat"><span class="std std-numref">Fig. 11.4</span></a>). Cela garantit que
+l’image après est sur le disque, mais écrase l’image avant et risque donc de rendre impossible
+un <code class="docutils literal notranslate"><span class="pre">rollback</span></code>.</p>
+<figure class="align-center" id="id9">
+<span id="write-immediat"></span><a class="reference internal image-reference" href="_images/write-immediat.png"><img alt="_images/write-immediat.png" src="_images/write-immediat.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.4 </span><span class="caption-text">Ecriture immédiate: le <em>cache</em> et le disque sont synchrones</span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’écriture immédiate a un autre inconvénient: le coût d’écriture d’un bloc
+pour chaque mise à jour d’un nuplet. Pour des applications qui font beaucoup
+de modifications, les performances risquent d’être sévèrement affectées.</p>
+</section>
+<section id="ecritures-differees">
+<h3>Ecritures différées<a class="headerlink" href="#ecritures-differees" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Les écritures différées fonctionnent à l’inverse des écritures immédiates: on garde dans le cache
+tous les blocs modifiés, et on s’interdit de les écrire tant que les modifications ne font
+pas l’objet d’un <code class="docutils literal notranslate"><span class="pre">commit</span></code> (<a class="reference internal" href="#write-differe"><span class="std std-numref">Fig. 11.5</span></a>).</p>
+<figure class="align-center" id="id10">
+<span id="write-differe"></span><a class="reference internal image-reference" href="_images/write-differe.png"><img alt="_images/write-differe.png" src="_images/write-differe.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.5 </span><span class="caption-text">Ecriture différée: On <em>interdit</em> l’écriture d’un bloc modifié avant le  <code class="docutils literal notranslate"><span class="pre">commit</span></code></span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Cette stratégie est en apparence plus satisfaisante pour la reprise sur panne: en cas de panne,
+la mémoire RAM contient l’image après qui doit justement être effacée, et le disque contient
+l’image avant qui doit être conservée. Elle a l’inconvénient de mobiliser potentiellement
+beaucoup de mémoire RAM en présence de grandes transactions qui font beaucoup de modifications.
+De plus, certains détails techniques sont compliqués: comment faire par exemple si un bloc
+contient des données modifiées par deux transactions, et que la première valide
+alors que la seconde annule?</p>
+</section>
+<section id="ecritures-opportunistes">
+<h3>Ecritures opportunistes<a class="headerlink" href="#ecritures-opportunistes" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Enfin, la troisième stratégie est celle des écritures opportunistes. Dans ce cas, un bloc
+modifié en mémoire n’est pas écrit immédiatement, mais il peut l’être à un moment totalement
+indépendant du déroulement de la transaction, si le système l’estime nécessaire (<a class="reference internal" href="#write-opportuniste"><span class="std std-numref">Fig. 11.6</span></a>).</p>
+<figure class="align-center" id="id11">
+<span id="write-opportuniste"></span><a class="reference internal image-reference" href="_images/write-opportuniste.png"><img alt="_images/write-opportuniste.png" src="_images/write-opportuniste.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.6 </span><span class="caption-text">Ecriture opportuniste: on attend la meilleure opportunité pour synchroniser le buffer et le disque.</span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>C’est le mode le plus satisfaisant pour les performances, puisque le système peut choisir l’opprtunité
+offerte par un moment favorable pour écrire un bloc, en subissant un minimum de contraintes. C’est en apparence
+une stratégie très défavorable à la reprise sur panne puisque l’image après est partiellement en mémoire,
+partiellement sur le disque, et que l’image avant est partiellement effacée.</p>
+<p>Nous verrons dans la prochaine session qu’aucune de ces stratégies n’est à elle seule suffisante pour
+concevoir et implanter un algorithme fiable de reprise sur panne.</p>
+</section>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<p>En mode opportuniste, quelle   affirmation est exacte ?</p>
+<div class="reauthoring_embedded_quiz" id="rp2-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est toujours dans le buffer.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est toujours sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’image après d’une transaction est entièrement dans le buffer, et partiellement sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image avant d’une transaction est toujours sur le disque.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En mode différé, quelle   affirmation est exacte ?</p>
+<div class="reauthoring_embedded_quiz" id="rp2-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’image après d’une transaction est toujours dans le buffer.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est toujours sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est entièrement dans le buffer, et partiellement sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image avant d’une transaction est toujours sur le disque.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En mode immédiat, quelle   affirmation est exacte ?</p>
+<div class="reauthoring_embedded_quiz" id="rp2-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est toujours dans le buffer.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> L’image après d’une transaction est toujours sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image après d’une transaction est entièrement dans le buffer, et partiellement sur le disque.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image avant d’une transaction est toujours sur le disque.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></section>
+</section>
+<section id="s3-une-approche-simpliste">
+<h2>S3: une approche simpliste<a class="headerlink" href="#s3-une-approche-simpliste" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrpsimpliste.pdf">Diapositives: une approche simpliste</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/premiere_approche.22495">Vidéo sur l’approche simpliste</a></p></li>
+</ul>
+</div>
+<p>Si on veut concilier à la fois de bonnes performances
+par limitation des entrées/sorties et la garantie de reprise
+sur panne, on réalise rapidement que le problème est plus compliqué
+qu’il n’y paraît. Voici par exemple un premier algorithme,
+simpliste, qui ne fonctionne pas. L’idée est d’utiliser le cache
+pour les données modifiées (donc l’image après,
+cf. le chapitre <a class="reference internal" href="conc.html#chap-conc"><span class="std std-ref">Contrôle de concurrence</span></a>),
+et le disque pour les données
+validées (l’image avant).</p>
+<p><em>Algorithme simpliste</em>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>ne jamais écrire une donnée modifiée par une transaction <em>T</em> avant que le <code class="docutils literal notranslate"><span class="pre">commit</span></code> n’arrive,</p></li>
+<li><p>au moment du <code class="docutils literal notranslate"><span class="pre">commit</span></code> de <em>T</em>, forcer l’écriture de tous les blocs modifiés par <em>T</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Pourquoi  cela ne marche-t-il pas? Pour des raisons
+de performance et des raisons de correction (la reprise
+n’est pas garantie).</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Surcharge du cache. Si on interdit l’écriture des blocs
+modifiés, qui peut dire que le cache ne va pas, au bout d’un
+certain temps, contenir uniquement des blocs modifiés et
+donc épinglés en mémoire? Aucune remplacement ne devient
+alors possible, et le système est bloqué. Entretemps il
+est probable que l’on aura assisté à une lente diminution des performances
+due à la réduction de la capacité effective du cache.</p></li>
+<li><p>Ecritures aléatoires. Si on décide, au moment
+du <code class="docutils literal notranslate"><span class="pre">commit</span></code>, d’écrire tous les blocs modifiés,
+on risque de déclencher des écritures, à des emplacements
+éloignés, de blocs donc seule une petite partie est modifiée.
+Or un principe essentiel de la performance d’un SGBD est
+de privilégier les écritures séquentielles de blocs
+pleins.</p></li>
+<li><p>Risque sur la recouvrabilité. Que faire si une panne  survient
+après         des écritures mais  avant l’enregistrement
+du <code class="docutils literal notranslate"><span class="pre">commit</span></code>?</p></li>
+</ul>
+</div></blockquote>
+<p>Dans le dernier cas, on ne peut simplement plus assurer une reprise.
+Donc cette solution est inefficace et incorrecte. On en conclut que
+les fichiers de la base ne peuvent pas, à eux seuls, servir
+de support à la reprise sur panne. Nous avons besoin
+d’une structure auxiliaire, le journal des transactions.</p>
+<section id="id2">
+<h3>Quiz<a class="headerlink" href="#id2" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le point de commit est une notion qui désigne :</p>
+<div class="reauthoring_embedded_quiz" id="rp3-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le moment où l’application transmet un ordre commit.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le moment où le système acquitte l’exécution de l’ordre commit à l’application.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En mode opportuniste, je peux garantir :</p>
+<div class="reauthoring_embedded_quiz" id="rp3-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le commit</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le rollback</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Aucun des deux</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En mode immédiat, je peux garantir :</p>
+<div class="reauthoring_embedded_quiz" id="rp3-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le commit</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le rollback</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Aucun des deux</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>En mode différé, je peux garantir :</p>
+<div class="reauthoring_embedded_quiz" id="rp3-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le commit</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le rollback</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Aucun des deux</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></section>
+</section>
+<section id="s4-journal-des-transactions">
+<h2>S4: journal des transactions<a class="headerlink" href="#s4-journal-des-transactions" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrplog.pdf">Diapositives: le journal des transactions</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/le_journal_des_transactions.22509">Vidéo sur le journal des transactions</a></p></li>
+</ul>
+</div>
+<p>Un journal des transactions (<em>log</em> en anglais)
+est un ensemble de fichiers
+complémentaires à ceux de la base de
+données, servant à stocker sur un support non volatile les
+informations nécessaires à la reprise sur panne.
+L’idée de base est exprimée par l’équation suivante:</p>
+<div class="admonition-l-etat-de-la-base admonition">
+<p class="admonition-title">L’état de la base</p>
+<p>Etat de la base = journaux de transactions + fichiers de la base</p>
+</div>
+<p>Le journal contient les types d’enregistrements suivants:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">start(T)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">write(T,</span> <span class="pre">x,</span> <span class="pre">old_val,</span> <span class="pre">new_val)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">commit</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rollback</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">checkpoint</span></code></p></li>
+</ul>
+</div></blockquote>
+<p>L’enregistrement dans le journal
+des opérations de lectures n’est pas nécessaire, sauf pour
+de l’audit éventuellement. Le journal est
+un fichier séquentiel, avec un cache dédié, qui fonctionne
+selon la technique classique. Quand le cache est plein,
+on écrit dans le fichier et on vide le cache. Les écritures
+sont séquentielles et maximisent la rentabilité des entrées/sorties.
+On doit écrire dans le journal (physiquement) à deux occasions.</p>
+<div class="admonition-regle-du-point-de-commit admonition">
+<p class="admonition-title">Règle du point de commit.</p>
+<p>Au moment d’un <code class="docutils literal notranslate"><span class="pre">commit</span></code> le
+cache du journal doit être écrit sur le disque (écriture forcée). On
+satisfait donc l’équation: l’état de la base est sur le disque au
+moment où l’enregistrement <code class="docutils literal notranslate"><span class="pre">commit</span></code> est écrit dans le fichier journal.</p>
+</div>
+<div class="admonition-regle-dite-write-ahead admonition">
+<p class="admonition-title">Règle dite <em>write-ahead</em></p>
+<p>Si un bloc du fichier de données, marqué comme modifié mais non validé,
+est écrit sur le disque, il va écraser l’image avant. Le risque est
+alors de ne plus respecter l’équation,
+et il faut donc écrire dans le journal pour être en mesure
+d’effectuer un rollback éventuel.</p>
+</div>
+<p>La  <a class="reference internal" href="#recovery2"><span class="std std-numref">Fig. 11.7</span></a> explique
+ce choix qui peut sembler inutilement complexe.
+Elle montre la structure des mémoires
+impliquées dans la gestion du journal des transactions. Nous
+avons donc sur mémoire stable (c’est-à-dire non volatile, résistante
+aux coupures électriques) les fichiers de la base d’une part,
+le fichier journal de l’autre. Si possible ces fichiers
+sont sur des disques différents. En mémoire centrale nous
+avons un cache principal stockant une image partielle des
+fichiers de la base, et un cache
+pour le fichier journal. Une donnée modifiée et
+validée est toujours dans le fichier
+journal. Elle peut être
+dans les fichiers de la base, mais seulement une fois que le bloc
+modifié est écrit, ce qui finit toujours par arriver
+sur la durée du fonctionnement normal d’un système. Si tout
+allait toujours bien (pas de panne, pas de <code class="docutils literal notranslate"><span class="pre">rollback</span></code>),
+on n’aurait jamais besoin du journal.</p>
+<figure class="align-center" id="id12">
+<span id="recovery2"></span><a class="reference internal image-reference" href="_images/recovery.png"><img alt="_images/recovery.png" src="_images/recovery.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.7 </span><span class="caption-text">Gestion  des écritures avec fichier journal</span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<section id="id3">
+<h3>Quiz<a class="headerlink" href="#id3" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Quelle affirmation, relatives au contenu du <em>log</em>, est-elle <em>inexacte</em> ?</p>
+<div class="reauthoring_embedded_quiz" id="rp4-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Dans le log, on trouve une instruction commit pour toutes les transactions validées.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Dans le log, on trouve une instruction rollback pour toutes les transactions annulées.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’image avant est dans le log.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>La règle du point de commit vise à garantir :</p>
+<div class="reauthoring_embedded_quiz" id="rp4-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Que l’état de la base est dans le fichier de la base.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Que l’état de la base est dans le fichier journal.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Que l’image avant est effacée du log et de la base.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>Dans quel mode n’est-t-il pas nécessaire d’appliquer la règle du <em>write-ahead logging</em> ?</p>
+<div class="reauthoring_embedded_quiz" id="rp4-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> En mode opportuniste.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> En mode différé.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> En mode immédiat.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>Quelle affirmation sur le fonctionnement du log est-elle  fausse ?</p>
+<div class="reauthoring_embedded_quiz" id="rp4-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Chaque mise à jour par une application déclenche une écriture dans le log.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Chaque écriture opportuniste dans la base déclenche une écriture dans le log.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Chaque commit par une application déclenche une mise à jour dans le log.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></section>
+</section>
+<section id="s5-algorithmes-de-reprise-sur-panne">
+<h2>S5: Algorithmes de reprise sur panne<a class="headerlink" href="#s5-algorithmes-de-reprise-sur-panne" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrpredoundo.pdf">Diapositives: faire et défaire</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/algorithmes_de_reprise_sur_panne.22511">Vidéo sur les algorithmes redo/undo</a></p></li>
+</ul>
+</div>
+<p>Si une panne légère (pas de perte de disque)
+survient, il faut effectuer deux types
+d’opérations:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>refaire (Redo) les transactions validées
+avant la panne qui ne seraient par correctement
+écrites dans les fichiers de la base;</p></li>
+<li><p>défaire (Undo) les transactions en cours au moment
+de la panne, qui avaient déjà effectué des mises à jour dans les fichiers de la base.</p></li>
+</ul>
+</div></blockquote>
+<p>Ces deux opérations sont basées sur le journal. On doit
+faire un Redo pour les transactions validées (celles
+pour lesquelles on trouve un <code class="docutils literal notranslate"><span class="pre">commit</span></code> dans le journal)
+et un Undo
+pour les transactions actives (celles qui n’ont ni
+<code class="docutils literal notranslate"><span class="pre">commit</span></code>, ni <code class="docutils literal notranslate"><span class="pre">rollback</span></code> dans le journal).</p>
+<section id="la-notion-de-checkpoint">
+<h3>La notion de checkpoint<a class="headerlink" href="#la-notion-de-checkpoint" title="Lien permanent vers ce titre">¶</a></h3>
+<p>En cas de panne, il faudrait en principe refaire
+toutes les transactions du journal, depuis l’origine
+de la création de la base, et défaire celles
+qui étaient en cours. Au moment d’un checkpoint,
+le SGBD écrit sur disque tous les blocs
+modifiés, ce qui garantit que les données validées par
+<code class="docutils literal notranslate"><span class="pre">commit</span></code> sont dans la base. Il devient inutile de faire un
+Redo pour les transactions validées avant
+le checkpoint.</p>
+<figure class="align-center" id="id13">
+<span id="checkpoint"></span><a class="reference internal image-reference" href="_images/checkpoint.png"><img alt="_images/checkpoint.png" src="_images/checkpoint.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.8 </span><span class="caption-text">Reprise sur panne après un <em>checkpoint</em></span><a class="headerlink" href="#id13" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La  <a class="reference internal" href="#checkpoint"><span class="std std-numref">Fig. 11.8</span></a>  montre un exemple,
+avec un <em>checkpoint</em> survenant après la validation
+de <em>T_1</em>. Toutes les mises à jour de <em>T_1</em> ont été écrites
+dans les fichiers de la base au moment du checkpoint, et
+il est donc inutile d’effectuer un Redo pour
+cette transaction. Pour toutes les autres le Redo
+est indispensable. Les mises à jour de <em>T_2</em> par exemple,
+bien que validées, peuvent rester dans le <em>cache</em> sans
+être écrites dans les fichiers de la base au moment de
+la panne. Elles sont alors perdues et n’existent que
+dans le journal.</p>
+<p>Un checkpoint prend du temps: il faut écrire
+sur le disque tous les blocs modifiés. Sa fréquence
+est généralement paramétrable par
+l’administrateur. Il est indispensable de maîtriser
+la taille des journaux de transactions qui, en l’absence
+de mesures de maintenance (comme le <em>checkpoint</em>)
+ne font que grossir et peuvent atteindre des volumes
+considérables.</p>
+</section>
+<section id="avec-mises-a-jour-differees">
+<h3>Avec mises à jour différées<a class="headerlink" href="#avec-mises-a-jour-differees" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Voici maintenant un premier algorithme correct,
+qui s’appuie sur l’interdiction de toute écriture
+d’un bloc contenant des mises à jour non validées.
+L’intérêt est d’éviter d’avoir à effectuer
+des Undo à partir du journal. L’inconvénient
+est de devoir épingler des pages en mémoire,
+avec un risque de se retrouver à court d’espace
+disponible.</p>
+<p>Au moment d’un <code class="docutils literal notranslate"><span class="pre">commit</span></code>, on écrit d’abord dans le journal,
+puis on retire l’épingle des données du cache pour qu’elles
+soient écrites. Il n’y a jamais besoin de faire un Undo.
+C’est un algorithme NO-UNDO/REDO:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on constitue la liste des transactions validées
+depuis le dernier <em>checkpoint</em>;</p></li>
+<li><p>on prend les entrées <code class="docutils literal notranslate"><span class="pre">write</span></code> de ces
+transactions  dans l’ordre de leur exécution, et
+on s’assure que chaque donnée <em>x</em> a bien
+la valeur <code class="docutils literal notranslate"><span class="pre">new_val</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<p>On peut aussi refaire les opérations
+dans l’ordre inverse, en s’assurant qu’on
+ne refait que la dernière mise à jour validée.</p>
+<p>L’opération de Redo est idempotente: on
+peut la réexécuter autant de fois qu’on veut
+sans changer le résultat de la première exécution.
+C’est une propriété nécessaire, car la reprise sur panne
+elle-même peut échouer!</p>
+</section>
+<section id="avec-mise-a-jour-immediates-ou-opportunistes">
+<h3>Avec mise à jour immédiates ou opportunistes<a class="headerlink" href="#avec-mise-a-jour-immediates-ou-opportunistes" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Dans ce second algorithme (de loin
+le plus répandu), on autorise l’écriture de blocs modifiés.
+Dans ce cas il faut  défaire les mises à jours
+de transactions annulées. Il existe deux variantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Avant un commit, on force les
+écritures dans la base: il n’y a jamais jamais besoin de
+faire un Redo (Undo/No-Redo)</p></li>
+<li><p>Si on ne force pas  les   écritures dans la base,
+c’est un algorithme Undo/Redo,
+le plus souvent rencontré car il évite le flot
+d’écriture aléatoires à déclencher sur chaque <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<p>L’algorithme se décrit simplement comme suit:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on constitue la liste des transactions actives
+<span class="math notranslate nohighlight">\(L_A\)</span> et la liste des transactions validées <span class="math notranslate nohighlight">\(L_V\)</span>
+au moment de la panne;</p></li>
+<li><p>on annule les écritures de  <span class="math notranslate nohighlight">\(L_A\)</span>  avec le journal: attention
+les annulations se font dans l’ordre inverse de
+l’exécution initiale;</p></li>
+<li><p>on refait les écritures de  <span class="math notranslate nohighlight">\(L_V\)</span>  avec le journal.</p></li>
+</ul>
+</div></blockquote>
+<p>Notez qu’avec cette technique on ne force jamais l’écriture
+des données modifiées (sauf aux <em>checkpoints</em>) donc on attend
+qu’un <em>flush</em> (mise sur disque des blocs
+modifiées) intervienne naturellement pour qu’elles
+soient placées sur le disque.</p>
+</section>
+<section id="id4">
+<h3>Quiz<a class="headerlink" href="#id4" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Dans quel mode ne faut-il pas faire un Redo ?</p>
+<div class="reauthoring_embedded_quiz" id="rp5-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Opportuniste</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Immédiat</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Différé</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp5-2"><form class="reauthoring_embedded_quiz_questions"><p>Dans quel mode ne faut-il pas faire un Undo ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Opportuniste</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Immédiat</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Différé</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp5-3"><form class="reauthoring_embedded_quiz_questions"><p>Voici le contenu d’un fichier journal au moment d’une panne, les transactions les plus anciennes d’abord :</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>start(T1)
+write (T1, x, 10, 20)
+commit(T1)
+checkpoint
+start(T2)
+write(T2, y, 5, 10)
+start(T4)
+write(T4, x, 20, 40)
+start(T3)
+write(T3, z, 15, 30)
+write(T4, u, 100, 101)
+commit(T4)
+write (T2, x, 40, 60)
+</pre></div>
+</div>
+<p>Quel est le contenu de Lv, la liste des transactions validées ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T1</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T4</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T1, T2</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> T1, T4</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp5-4"><form class="reauthoring_embedded_quiz_questions"><p>Quel est le contenu de La, liste des transactions actives ou annulées</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T2</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T4</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> T2, T3</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> T3</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp5-5"><form class="reauthoring_embedded_quiz_questions"><p>Quelles sont les valeurs de x, y, z et u après le Undo?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> x=40, z=15, y=5, u=100.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  x=60, z=30, y=10, u=100.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> x=40, z=30, y=10, u=100.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp5-6"><form class="reauthoring_embedded_quiz_questions"><p>Quelles sont les valeurs de x, y, z et u après le Redo?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> x=60, y=10, z=5, u=100</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  x=60, y=10, z=5, u=101</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> x=40, y=5, z=15, u=100</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></section>
+</section>
+<section id="s6-pannes-de-disque">
+<h2>S6: pannes de disque<a class="headerlink" href="#s6-pannes-de-disque" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slrpdisque.pdf">Diapositives: pannes de disque</a></p></li>
+<li><p><a class="reference external" href="http://www.canal-u.tv/video/inria/pannes_de_disque.22513">Vidéo sur les pannes de disque</a></p></li>
+</ul>
+</div>
+<section id="journaux-et-sauvegardes">
+<h3>Journaux et sauvegardes<a class="headerlink" href="#journaux-et-sauvegardes" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le journal  peut également servir à la reprise en cas de perte d’un disque.
+Il est cependant essentiel d’utiliser deux disques
+séparés. Les sauvegardes binaires (les fichiers de la base),
+associées aux journaux des mises à jour,
+vérifient en effet l’équation suivante:</p>
+<div class="admonition-regle-3 admonition">
+<p class="admonition-title">Règle 3</p>
+<p>Etat de la base  = sauvegarde binaire + journaux des mises à jour</p>
+</div>
+<p>En ré-exécutant ces modifications à partir d’une sauvegarde, on
+récupère l’état de la base au moment de la panne d’un disque. Deux
+cas se présentent: panne du disque contenant le journal
+(appelons-le <span class="math notranslate nohighlight">\(D_l\)</span>) et panne du disque contenant les
+fichiers de la base (appelons-le <span class="math notranslate nohighlight">\(D_b\)</span>).</p>
+<p>La panne du disque journal est très grave car il devient alors impossible
+de reconstituer correctement la base. Il se peut notamment que des transactions
+en cours d’exécution aient déjà écrit sur le disque de la base. L’image
+avant est alors seulement dans le journal, se trouve donc perdue,
+et il devient impossible d’annuler la transaction. Forcer les transactions
+en cours à effectuer un <code class="docutils literal notranslate"><span class="pre">commit</span></code>, et ce au moment d’une panne de disque, n’est
+pas une solution viable.</p>
+<p>Il faut à tout prix protéger le journal, soit en utilisant des systèmes
+RAID de disques redondants, soit en le répliquant dans un site sûr.</p>
+<p>En cas de panne du disque de la base, il faut en fait effectuer une reprise
+sur panne à partir des journaux, en appliquant les
+Redo et Undo à la dernière
+sauvegarde disponible.</p>
+<figure class="align-center" id="id14">
+<span id="reprise-froid"></span><a class="reference internal image-reference" href="_images/reprise_froid.png"><img alt="_images/reprise_froid.png" src="_images/reprise_froid.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 11.9 </span><span class="caption-text">Reprise à froid avec une sauvegarde et des fichiers <em>log</em></span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La  <a class="reference internal" href="#reprise-froid"><span class="std std-numref">Fig. 11.9</span></a> montre une situation classique,
+avec un sauvegarde effectuée le 15 mars, des fichiers journaux
+avec un <em>checkpoint</em> quotidien, chaque
+<em>checkpoint</em> entraînant la création d’un fichier
+physique supplémentaire. En théorie seul le dernier fichier journal
+est utile (puisque seules les opérations depuis le dernier
+<em>checkpoint</em> doit être refaites). C’est vrai
+seulement pour des reprises à chaud, après coupure de courant. En cas
+de perte d’une disque tous les fichiers journaux depuis la
+dernière sauvegarde sont nécessaires.</p>
+<p>Il faut donc que l’administrateur réinstalle un disque
+neuf et y place la sauvegarde du 15 mars. Il demande
+ensuite au système
+une reprise sur panne depuis le 15 mars, en s’assurant
+que les fichiers journaux sont bien disponibles depuis cette date.
+Sinon l’état de la base au 18 mars ne peut  être récupéré,
+et il faut repartir de la sauvegarde.</p>
+<p>On réalise
+l’importance des journaux et de leur rôle pour le maintien des
+données. Un soin tout particulier (sauvegardes fréquentes, disques en
+miroir) doit être consacré à ces fichiers sur une base
+sensible.
+Autant la reprise peut s’effectuer automatiquement après une panne
+légère, de type coupure d’électricité, autant elle demande
+des interventions de l’administrateur, parfois délicates,
+en cas de perte d’un disque. On parle respectivement
+de reprise à chaud et de reprise à froid.
+Bien entendu les procédures de reprise
+doivent être testées et validées avant qu’un vrai problème
+survienne, sinon on est sûr de faire face dans la panique
+à des difficultés imprévues.</p>
+<p>Voici comment fonctionne alors la journalisation.</p>
+<blockquote>
+<div><ul>
+<li><p>Au moment d’un <code class="docutils literal notranslate"><span class="pre">commit</span></code>. Juste avant le
+<code class="docutils literal notranslate"><span class="pre">commit</span></code>, le système écrit  dans le journal
+l’image après des enregistrements modifiés par la transaction.
+Pourquoi ne pas écrire les pages contenant les
+enregistrements modifiés?  Pour plusieurs raisons,
+la principale étant que s’il y a <em>n</em> enregistrements
+modifiées, répartis dans (au pire) <em>n</em> pages,
+il faut écrire ces <em>n</em> pages sur le disque,
+souvent sans contiguité, ce qui est  très coûteux.</p>
+<p>En revanche ces <em>n</em> enregistrements peuvent être  regroupés
+dans une petit nombre de pages du buffer du journal
+puis écrits séquentiellement dans ce dernier. En résumé
+cette technique est beaucoup plus performante.</p>
+</li>
+<li><p>Quand le buffer principal est plein. Il faut alors
+replacer sur le disque certaines pages du buffer
+principal (<em>flush</em>). Si une page contient
+l’image après non validée d’un enregistrement, InnoDB risque
+de perdre l’image avant et donc d’être incapable
+d’effectuer un <code class="docutils literal notranslate"><span class="pre">rolback</span></code> en cas d’annulation
+ou de panne. L’image avant est donc au préalable écrite dans
+le journal.</p>
+<p>Les enregistrements validés sont simplement écrits sur
+le disque. Leur image dans le buffer principal et sur
+le disque redevient donc synchronisée.</p>
+<p>Il existe également forcément un version
+de cette image après dans le journal, qui n’est
+plus utile que pour les lectures cohérentes des
+transactions qui auraient commencé  avant la
+modification de l’enregistrement.</p>
+</li>
+<li><p>Au moment d’un <code class="docutils literal notranslate"><span class="pre">rollback</span></code>. InnoDB remplace
+les images après par les images avant, soit
+stockées sur le disque, soit placées
+dans le journal après un <em>flush</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Avec cet algorithme, toutes les données validées sont
+toujours sur disque, soit dans les fichiers de la base,
+soit dans le journal. Ce dernier peut contenir aussi bien
+des enregistrements validés, présents dans le buffer
+principal, mais pas encore <em>flushés</em> dans les fichiers
+de la base, que des enregistrements de l’image avant
+qui ont été remplacés par leur image après
+suite à un <em>flush</em>.</p>
+</section>
+<section id="id5">
+<h3>Quiz<a class="headerlink" href="#id5" title="Lien permanent vers ce titre">¶</a></h3>
+<div class="reauthoring_embedded_quiz" id="rp6-1"><form class="reauthoring_embedded_quiz_questions"><p>Le cours indique que l’état de la base est répliqué dans les
+journaux d’une part, le disque de la base et son buffer
+d’autre part. Est-ce vrai dans tous les modes ?
+Indiquez ceux pour lesquels cette affirmation est vraie :</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Mode opportuniste</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Mode différé</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Mode immédiat</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp6-1"><form class="reauthoring_embedded_quiz_questions"><p>Jusqu’à quand faut-il conserver le contenu d’un fichier journal collecté à une date d ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Toujours</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Jusqu’à ce qu’une sauvegarde postérieure à d soit réalisée</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Jusqu’à d+1</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="rp6-3"><form class="reauthoring_embedded_quiz_questions"><p>Une réplication asynchrone (RA) s’effectue par un processus
+indépendant. Dans le cas d’un fichier journal, une RA
+implique que le serveur acquitte le commit quand
+les enregistrements sont dans le journal primaire,
+et initie en parallèle une réplication dans le journal
+secondaire. Quelles affirmations vous semblent fausses dans ce contexte ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La RA n’entraîne pas de perte de performance pour l’application.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  La RA est pénalisante pour l’application.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> La RA est aussi sûre qu’une réplication synchrone.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-rp1-la-reprise-sur-panne-a-la-main admonition" id="ex-rp1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp1">ex-rp1</a>: la reprise sur panne à la main</p>
+<blockquote>
+<div><p>Soit le fichier journal suivant (les écritures les plus anciennes sont
+en haut).</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>start(T1)
+write (T1, x, 10, 20)
+commit(T1)
+checkpoint
+start(T2)
+write(T2, y, 5, 10)
+start(T4)
+write(T4, x, 20, 40)
+start(T3)
+write(T3, z, 15, 30)
+write(T4, u, 100, 101)
+commit(T4)
+write (T2, x, 40, 60)
+......................... panne!
+</pre></div>
+</div>
+<p>Questions.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Indiquer la reprise sur panne avec l’algorithme Undo/Redo</p></li>
+<li><p>Donner le comportement de la variante avec mise à jour différée
+(No-Undo/Redo). Y a-t-il des informations
+inutiles dans le journal?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-rp2-la-reprise-sur-panne-a-la-main admonition" id="ex-rp2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp2">ex-rp2</a>: la reprise sur panne à la main</p>
+<blockquote>
+<div><p>Spécifiez un algorithme de Redo qui effectue le parcours
+du <em>log</em> dans l’ordre inverse des insertions, et s’arrête dès
+que possible.</p>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-rp3-petit-questionnaire admonition" id="ex-rp3">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp3">ex-rp3</a>: petit questionnaire</p>
+<blockquote>
+<div><p>Indiquez la bonne réponse aux questions suivantes (en les justifiant).</p>
+<blockquote>
+<div><ul>
+<li><p>Pendant une reprise sur panne les opérations doivent être,:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>commutatives</p></li>
+<li><p>associatives</p></li>
+<li><p>idempotentes</p></li>
+<li><p>distributives.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Dans un protocole de reprise sur panne avec mise à jour différée,
+quelles sont les opérations nécessaires:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Undo</p></li>
+<li><p>Redo</p></li>
+<li><p>Undo et Redo</p></li>
+<li><p>aucune des deux.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Dans le cas d’un algorithme avec mises à jour différées,
+que doit-on conserver dans le log,?</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>la valeur avant mise à jour</p></li>
+<li><p>la valeur après mise à jour</p></li>
+<li><p>les valeurs avant et après mise à jour</p></li>
+<li><p>uniquement les <code class="docutils literal notranslate"><span class="pre">start(T)</span></code> et <code class="docutils literal notranslate"><span class="pre">commit(T)</span></code></p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-rp4-pourquoi-dans-l-ordre-inverse admonition" id="ex-rp4">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp4">ex-rp4</a>: pourquoi dans l’ordre inverse?</p>
+<blockquote>
+<div><p>Donner un exemple illustrant la nécessité d’effectuer un
+Redo dans l’ordre inverse de l’exécution
+(donner les entrées du fichier journal, et expliquer
+le déroulement de l’annulation).</p>
+</div></blockquote>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">11. Reprise sur panne</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-introduction">S1: introduction</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#l-etat-de-la-base">L’état de la base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#garanties-transactionnelles">Garanties transactionnelles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-mise-a-jour-differee-immediate-et-opportuniste">S2: mise à jour différée, immédiate et opportuniste</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ecritures-immediates">Ecritures immédiates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ecritures-differees">Ecritures différées</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ecritures-opportunistes">Ecritures opportunistes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-une-approche-simpliste">S3: une approche simpliste</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s4-journal-des-transactions">S4: journal des transactions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s5-algorithmes-de-reprise-sur-panne">S5: Algorithmes de reprise sur panne</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#la-notion-de-checkpoint">La notion de checkpoint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#avec-mises-a-jour-differees">Avec mises à jour différées</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#avec-mise-a-jour-immediates-ou-opportunistes">Avec mise à jour immédiates ou opportunistes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id4">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s6-pannes-de-disque">S6: pannes de disque</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#journaux-et-sauvegardes">Journaux et sauvegardes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id5">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="conc.html" title="10. Contrôle de concurrence"
+             >précédent</a> |
+          <a href="annales.html" title="12. Annales des examens"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;11. &lt;/span&gt;Reprise sur panne</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

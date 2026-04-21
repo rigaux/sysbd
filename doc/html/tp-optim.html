@@ -1,0 +1,428 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>8. Travaux pratiques: optimisation &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="9. Transactions" href="transactions.html" />
+    <link rel="prev" title="7. Evaluation et optimisation" href="optim.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;8. &lt;/span&gt;Travaux pratiques: optimisation</a></div>
+        <div class="rel">
+          <a href="optim.html" title="7. Evaluation et optimisation"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="transactions.html" title="9. Transactions"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="travaux-pratiques-optimisation">
+<span id="chap-tpoptim"></span><h1><span class="section-number">8. </span>Travaux pratiques: optimisation<a class="headerlink" href="#travaux-pratiques-optimisation" title="Lien permanent vers ce titre">¶</a></h1>
+<section id="atelier-en-ligne-plans-d-execution">
+<h2>Atelier en ligne: plans d’exécution<a class="headerlink" href="#atelier-en-ligne-plans-d-execution" title="Lien permanent vers ce titre">¶</a></h2>
+<p>Ces travaux pratiques consistent à exécuter des requêtes sur de véritables bases de données gérées par le
+système PostgreSQL, et à interpéter le plan d’exécution de ces requêtes.</p>
+<p>Vous diposez pour cela d’un outil en ligne qui vous permet d’entrer des requêtes SQL, de les exécuter, et
+de consulter le résultat et, surtout, le plan d’exécution. Les exercices  consistent en deux parties</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>étant donnée une question posée sur la base, plusieurs requêtes SQL sont proposées; vous devez trouvez celle(s) qui
+exprime(nt) correctement la question - il peut y en avoir plusieurs, équivalentes;</p></li>
+<li><p>vous pouvez alors copier une des requêtes SQL correctes dans la fenêtre d’entrée de l’outil en ligne, et inspecter le plan d’exécution; des questions vous sont posées sur l’interprétation de ce plan.</p></li>
+</ul>
+</div></blockquote>
+<p>Le schéma de la base ne comprend que trois tables: Artiste contient des personnalités du cinéma,
+acteurs/actrices ou réalisateur/réalisatrice; Film contient des films, chaque film étant lié à son/sa
+réalisateur/réalisatrice; enfin la table Rôle indique quels acteurs ont tourné dans quels films.
+Ce sont les tables qui ont servi de support aux exemples du cours.</p>
+<p>Voici leur schéma:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Artiste</span> <span class="p">(</span>
+   <span class="n">id</span> <span class="nb">integer</span><span class="p">,</span>
+  <span class="n">nom</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
+  <span class="n">prenom</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
+  <span class="n">annee_naissance</span> <span class="nb">integer</span><span class="p">,</span>
+  <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id</span><span class="p">)</span>
+  <span class="p">)</span>
+
+  <span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Film</span> <span class="p">(</span>
+        <span class="n">id</span> <span class="nb">integer</span><span class="p">,</span>
+        <span class="n">titre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span>
+        <span class="n">annee</span> <span class="nb">integer</span>
+        <span class="n">id_realisateur</span> <span class="nb">integer</span><span class="p">,</span>
+        <span class="n">genre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
+        <span class="n">resume</span> <span class="nb">text</span><span class="p">,</span>
+        <span class="n">code_pays</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span>
+        <span class="k">version</span> <span class="nb">integer</span><span class="p">,</span>
+        <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id</span><span class="p">),</span>
+        <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_realisateur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
+        <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">code_pays</span><span class="p">)</span> <span class="k">references</span> <span class="n">Pays</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">CREATE</span> <span class="k">TABLE</span> <span class="k">Role</span> <span class="p">(</span>
+           <span class="n">id_film</span> <span class="nb">integer</span><span class="p">,</span>
+           <span class="n">id_acteur</span> <span class="nb">integer</span><span class="p">,</span>
+           <span class="n">nom_role</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">60</span><span class="p">),</span>
+           <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_film</span><span class="p">,</span> <span class="n">id_acteur</span><span class="p">)</span> <span class="p">,</span>
+           <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_film</span><span class="p">)</span> <span class="k">references</span> <span class="n">Film</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
+           <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_acteur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<p>Sur ce schéma, trois bases ont été créées.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>La première, nommée Minus, contient quelques centaines de films et artistes</p></li>
+<li><p>La seconde, nommée Magnus, contient quelques millions de films et d’acteurs - elle a été obtenue en
+dupliquant les données de la base Minus, ne vous étonnez donc pas de trouver beaucoup de fois le même titre ou le même nom: nous cherchons ici un volume suffisant pour étudier comment le plan d’exécution d’une requête est adapté par PostgreSQL par rapport à celui de la base Minus.</p></li>
+<li><p>Enfin, la troisième, nommée Magnindex, a le même contenu que Magnus, mais des index supplémentaires on été créés.</p></li>
+</ul>
+</div></blockquote>
+<p>Pour chaque requête, vous êtes invités à étudier le plan d’exécution produit par PostgreSQL sur chaque base. La
+variation de ce plan correspond, comme expliqué en cours, à la prise en compte du contexte (volumétrie et présence d’index)
+par l’optimiseur de PostgreSQL. À vous d’interpréter ces variations et de réponde pertinemment aux questions posées.</p>
+<p>Voici un exemple commenté d’interrogation et d’analyse du plan d’exécution.</p>
+<section id="un-exemple">
+<h3>Un exemple<a class="headerlink" href="#un-exemple" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La question posée est la suivante :
+<em>Donnez tous les titres des films parus après (au sens large) l’an 2000.</em>
+Parmi les requêtes suivantes, laquelle n’exprime pas cette question?</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="defSerial1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film where annee &gt;= 2000</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select annee, count(*) from Film group by annee having count(*) &gt;= 2000</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film where not (annee &lt; 2000)</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film where annee - 2000 &gt;= 0</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Souvenez-vous: il peut y avoir plusieurs requêtes SQL équivalentes mais différentes syntaxiquement.
+À vous de jouer: si vous ne trouvez pas la bonne réponse, il est clairement nécessaire de vous lancer dans
+une sérieuse révision SQL avant d’aller plus loin.</p>
+<p>Maintenant, vous pouvez copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et l’exécuter. Vous obtiendrez
+un échantillon du résultat  et,
+surtout, le plan d’exécution du SGBD (PostgreSQL).</p>
+</section>
+<section id="l-interpretation-du-plan">
+<h3>L’interprétation du plan<a class="headerlink" href="#l-interpretation-du-plan" title="Lien permanent vers ce titre">¶</a></h3>
+<p>En appliquant la requête à la base Minus, vous devriez obtenir un plan d’exécution de la forme</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Parcours séquentiel de film (temps de réponse:0.00 ; temps d&#39;exécution:7.10 ;
+            nombre de nuplets:20 ; mémoire allouée:15)
+  filter: (annee &gt;= 2000)
+</pre></div>
+</div>
+<p>Que nous dit PostgreSQL? Que la table <code class="docutils literal notranslate"><span class="pre">Film</span></code> est parcourue séquentiellement, en appliquant un
+filtre sur l’année. De plus, pour chaque opérateur du plan d’exécution, PostgreSQL a l’amabilité de
+nous fournir une estimation du coût d’exécution:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le temps de réponse est le temps mis pour obtenir le premier nuplet;</p></li>
+<li><p>le temps d’exécution est le temps mis pour exécuter l’ensemble de la requête.</p></li>
+</ul>
+</div></blockquote>
+<p>L’unité des valeurs affichées pour ces mesures est arbitraire et dépend des capacités du serveur: l’intérêt
+est de les comparer pour comprendre l’ordre de grandeur de l’optimisation obtenue. Grossièrement, il s’agit
+du nombre de blocs auxquels Postgres doit accéder pour satisfaire la requête (faites une recherche « Postgres explain » pour
+en savoir - un peu - plus).</p>
+<p>Postgres nous donne également une estimation du nombre de nuplets ramenés par la requête et la taille moyenne de
+chaque nuplet dans le résultat (un titre, donc).</p>
+<section id="premiere-requetes">
+<h4>Première requêtes<a class="headerlink" href="#premiere-requetes" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Vous devriez maintenant pouvoir répondre aux questions suivantes sans aucun problème :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim2"><form class="reauthoring_embedded_quiz_questions"><p>Un index est-il utilisé pour ce plan d’exécution?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim3"><form class="reauthoring_embedded_quiz_questions"><p>La table Film doit-elle être parcourue séquentiellement?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim4"><form class="reauthoring_embedded_quiz_questions"><p>Un index sur l’année peut-il améliorer le temps d’exécution?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Non</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Pas forcément</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</section>
+</section>
+<section id="et-en-changeant-de-base">
+<h3>Et en changeant de base<a class="headerlink" href="#et-en-changeant-de-base" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous reprenons maintenant la même requête, mais vous allez l’exécuter en changeant la base et la
+sélectivité de la requête : essayez d’abord avec Minus, puis avec Magnus, puis avec Magnindex.</p>
+<p>Commençons par chercher les films parus après 2000. Le résultat a peu d’intérêt et vous montre seulement
+de nombreuses réplications d’un même film pour Magnus et Magnindex. Regardez surtout le temps et de
+réponse et de temps d’exécution tels qu’ils sont évalués par Postgres, pour les bases Magnus et
+Magnindex qui ont la même volumétrie mais une organisation physique différente: Magnindex a plus d’index.</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim5"><form class="reauthoring_embedded_quiz_questions"><p>Un index est-il utilisé pour  magnindex</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim6"><form class="reauthoring_embedded_quiz_questions"><p>Pour quelle base a-t-on le meilleur temps de réponse?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Magnus</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Magnindex</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Les temps de réponse sont les mêmes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim7"><form class="reauthoring_embedded_quiz_questions"><p>Pour quelle base a-t-on le meilleur temps d’exécution?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Magnus</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Magnindex</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Les temps d’exécution sont les mêmes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim8"><form class="reauthoring_embedded_quiz_questions"><p>On veut maintenant tous les films parus après 1980. Un index est-il utilisé pour la base Magnindex?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<section id="ordonner-grouper-de-dupliquer">
+<h4>Ordonner, grouper, dé-dupliquer<a class="headerlink" href="#ordonner-grouper-de-dupliquer" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Déterminez les requêtes qui vont introduire un opérateur
+bloquant dans le plan d’exécution.</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim9"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select annee - 2000 from Film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select distinct annee from Film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select annee, count(*) from Film group by annee</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select max(annee) from Film where annee &gt;= 2000</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film order by annee</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> sans réponse</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Nous allons pouvoir le vérifier avec Postgres.
+Copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et exécutez-le.
+Vous obtiendrez le résultat dans un onglet
+et le plan d’exécution du SGBD (PostgreSQL) dans un autre. Puis répondez aux questions
+qui suivent :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim10"><form class="reauthoring_embedded_quiz_questions"><p>Quelle méthode emploie Postgres pour trouver les doublons et les éliminer?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le tri</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le hachage</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le parcours séquentiel</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim11"><form class="reauthoring_embedded_quiz_questions"><p>Quelle valeur nous confirme que l’opérateur est bloquant?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Le temps d’exécution</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le temps de réponse</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’utilisation de la mémoire</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim12"><form class="reauthoring_embedded_quiz_questions"><p>L’existence d’un index peut-elle éviter de recourir à un
+opérateur bloquant pour les requêtes ci-dessus?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> sans réponse</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</section>
+<section id="requetes-avec-ou-sans-index">
+<h4>Requêtes avec ou sans index<a class="headerlink" href="#requetes-avec-ou-sans-index" title="Lien permanent vers ce titre">¶</a></h4>
+<p>Voici un ensemble de requêtes. Indiquez celles pour lesquelles il est possible d’utiliser
+un index. Rappelons que toutes les clés primaires sont indexées par un arbre B, que la
+clé primaire de Film est l’attribut id, et que la clé primaire de Rôle est la paire
+(id_film, id_acteur).</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim12"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Film where titre=”Alien”</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Film where id_realisateur=65</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Film where id=34</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Role where id_film=34 and id_acteur=65</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Role where id_film=34</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Nous allons pouvoir le vérifier avec Postgres.
+Exécutez les requêtes ci-dessus pour consulter le plan d’exécution de Postgres et
+vérifier si ce dernier utilise ou non l’index. Pour chaque requête, regardez si le plan
+est le même pour la base Minus et la base Magnus. Puis répondez aux questions qui suivent :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim13"><form class="reauthoring_embedded_quiz_questions"><p>Pour la requête sélectionnant le film dont l’id est 34,
+Postgres utilise l’index sur la clé primaire.</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Pour la base Minus, mais pas la base Magnus</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Pour la base Magnus, mais pas la base Minus</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Pour les deux</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim14"><form class="reauthoring_embedded_quiz_questions"><p>Regardez le plan d’exécution pour la requête <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">id+1=35</span></code> sur
+la base Magnus. Que constate-t-on ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Postgres détecte correctement que la requête est équivalente à select * from Film where id=34 et utilise l’index</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Postgres renonce à utiliser l’index.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</section>
+<section id="algorithmes-de-jointure">
+<h4>Algorithmes de jointure<a class="headerlink" href="#algorithmes-de-jointure" title="Lien permanent vers ce titre">¶</a></h4>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim14"><form class="reauthoring_embedded_quiz_questions"><p>Quelles sont les requêtes pour trouver le titre des films réalisés par Stanley Kubrick?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film as f, Artiste as a where nom=”Kubrick”</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f, Artiste as a where id_realisateur = a.id and nom=”Kubrick”</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film as f, Artiste as a where f.id = a.id and nom=”Kubrick”</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where id_realisateur in (select id from Artiste where nom=”Kubrick”)</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where exists (select * from Artiste where id=id_realisateur and nom=”Kubrick”)</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f join Artiste as a on (f.id_realisateur=a.id) where nom=”Kubrick”</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<p>Copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et l’exécuter.
+Vous obtiendrez le résultat dans un onglet et le plan d’exécution du SGBD (PostgreSQL)
+dans un autre. Puis répondez aux questions qui suivent :</p>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="tpoptim15"><form class="reauthoring_embedded_quiz_questions"><p>Appliquez la requête à la base Minus. Quel est l’algorithme utilisé?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Boucles imbriquées simples</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Boucles imbriquées indexées</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Jointure par hachage</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim16"><form class="reauthoring_embedded_quiz_questions"><p>Quand on applique la requête à la base Minus, quelles sont les tables parcourues
+séquentiellement dans ce plan?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Film, mais pas Artiste</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Artiste, mais pas Film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Film et Artiste</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Aucune des deux</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim17"><form class="reauthoring_embedded_quiz_questions"><p>Quand on applique la requête à la base Minus, sur quel attribut s’effectue
+le hachage de la table Film ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> sur l’identifiant du film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> sur l’identifiant du réalisateur</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Aucun</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim18"><form class="reauthoring_embedded_quiz_questions"><p>Quand on applique la requête à la base Minus, quelle est la table dite
+« intérieure », celle stockée, après hachage, en mémoire ?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Artiste</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim19"><form class="reauthoring_embedded_quiz_questions"><p>Maintenant, appliquez la requête de jointure entre Film et Artiste à la base Magnus,
+mais sans sélection sur le nom du réalisateur (donc, sans spécifier le critère
+« nom=”Kubrick”). Quel est l’algorithme utilisé?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Boucles imbriquées simples</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Boucles imbriquées indexées</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Jointure par hachage</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><div class="reauthoring_embedded_quiz" id="tpoptim20"><form class="reauthoring_embedded_quiz_questions"><p>Quelle est la valeur qui sert de critère d’accès pour traverser l’index utilisé?</p>
+<ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’identifiant id de la table film</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’identifiant id de la table artiste</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le champ id_realisateur de la table film</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</section>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">8. Travaux pratiques: optimisation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#atelier-en-ligne-plans-d-execution">Atelier en ligne: plans d’exécution</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#un-exemple">Un exemple</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#l-interpretation-du-plan">L’interprétation du plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#et-en-changeant-de-base">Et en changeant de base</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="optim.html" title="7. Evaluation et optimisation"
+             >précédent</a> |
+          <a href="transactions.html" title="9. Transactions"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;8. &lt;/span&gt;Travaux pratiques: optimisation</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

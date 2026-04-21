@@ -1,0 +1,169 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\sectioncontents
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{slide}
+\section{REPRESENTATION PHYSIQUE DANS ORACLE}
+\end{slide}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{slide}
+\subsection{Repr\'esentation physique dans ORACLE V7}
+
+Les principales structures physiques utilis\'ees dans ORACLE sont\,:
+\begin{enumerate}
+  \item Le {\bf bloc} est l'unit\'e physique d'E/S.
+     La taille d'un bloc ORACLE est un
+        multiple de la taille des blocs du syst\`eme sous-jacent.
+  \item L'{\bf extension} est un ensemble de blocs contigus contenant
+        un m\^eme type d'information.
+  \item Le {\bf segment} est un ensemble d'extensions stockant un 
+        objet logique (une table, un index ...). 
+\end{enumerate}
+\end{slide}
+\begin{slide}
+\subsection{Tables, segments, extensions et blocs}
+
+\mywidthfigure{8cm}{oraphys.eps}
+
+\end{slide}
+\begin{slide}
+\subsection{Le segment ORACLE}
+
+Le segment est la zone physique contenant un objet logique. Il
+existe quatre types de segments\,:
+\begin{enumerate}
+  \item Le segment de donn\'ees (pour une table ou un $cluster$).
+  \item Le segment d'index.
+  \item Le $rollback\ segment$ utilis\'e pour les transactions.
+  \item Le segment temporaire (utilis\'e pour les tris par exemple).
+\end{enumerate}
+\end{slide}
+\begin{slide}
+\subsection{Base ORACLE, fichiers et  $TABLESPACE$}
+
+\begin{enumerate}
+ \item {\bf Physiquement}, une base ORACLE est un ensemble de fichiers.
+ \item {\bf Logiquement}, une base est divis\'ee par l'administrateur
+   en $tablespace$. Chaque $tablespace$ consiste en un (au moins)
+        ou plusieurs fichiers.
+\end{enumerate}
+La notion de $tablespace$ permet\,:
+\begin{enumerate}
+  \item De contr\^oler l'emplacement physique des donn\'ees.
+        (par ex.\,: le dictionnaire sur un disque,
+        les donn\'ees utilisateur sur un autre).
+  \item de faciliter la gestion (sauvegarde, protection, etc).
+\end{enumerate}
+\end{slide}
+\begin{slide}
+
+\myfigure{oratbspace.eps}
+
+\end{slide}
+\begin{slide}
+\subsection{Stockage des donn\'ees}
+
+Il existe deux mani\`eres de stocker une table\,:
+\begin{enumerate}
+  \item {\bf Ind\'ependamment}. Un segment est alors automatiquement
+        allou\'e \`a la table. Il est possible de sp\'ecifier
+        des param\`etres pour ce segment\,:
+       \begin{enumerate}
+             \item Sa taille initiale
+             \item Le pourcentage d'espace libre dans chaque bloc.
+             \item La taille des extensions.
+       \end{enumerate}
+  \item {\bf Dans un} $cluster$.
+ \end{enumerate}
+% Parler du ROWID
+\end{slide}
+\begin{slide}
+\subsection{Stockage des n-uplets}
+
+En r\`egle g\'en\'erale un n-uplet est stock\'e dans un seul bloc. 
+L'adresse physique d'un n-uplet est le $ROWID$ qui se d\'ecompose
+en trois parties\,:
+\begin{enumerate}
+   \item Le num\'ero du n-uplet dans la page.
+   \item Le num\'ero de la page, relatif au {\bf fichier} dans lequel
+         se trouve le n-uplet.
+   \item Le num\'ero du fichier.
+\end{enumerate}
+Exemple\,: 00000DD5.000.001 est l'adresse du premier n-uplet
+du bloc DD5 dans le premier fichier.
+\end{slide}
+\begin{slide}
+\subsection{Structures de donn\'ees pour l'optimisation}
+
+ORACLE 7 propose trois structures pour l'optimisation de requ\^etes\,:
+\begin{enumerate}
+  \item Les index
+  \item Les ``regroupements'' de tables ($Cluster$).
+  \item Le hachage.
+\end{enumerate}
+\end{slide}
+\begin{slide}
+\subsection{Les index ORACLE}
+
+On peut cr\'eer des index sur tout attribut (ou tout ensemble
+d'attributs) d'une table. ORACLE utilise l'arbre B+.
+\begin{enumerate}
+   \item Les noeuds contiennent les valeurs de l'attribut (ou des
+          attributs) cl\'e(s).
+   \item Les feuilles contiennent chaque valeur index\'ee et le 
+        $ROWID$ correspondant.
+\end{enumerate}
+Un index est stock\'e dans un segment qui lui est propre. On peut
+le placer par exemple sur un autre disque que celui contenant 
+la table.
+\end{slide}
+\begin{slide}
+\subsection{Les $cluster$}
+
+Le $cluster$ (regroupement) est un structure permettant d'optimiser
+les jointures. Par exemple, pour les tables $CINEMA$ et $SALLE$
+qui sont fr\'equemment jointes sur l'attribut $ID-Cinema$\,:
+\begin{enumerate}
+   \item On groupe les n-uplets de $CINEMA$ et de $SALLE$
+        ayant m\^eme valeur pour l'attribut $ID-cinema$.
+   \item On stocke ces groupes de n-uplets dans les pages
+         d'un segment sp\'ecial de type $cluster$.
+   \item On cr\'ee un index sur $ID-cinema$.
+\end{enumerate}
+\end{slide}
+\begin{slide}
+
+\myfigure{oracluster.eps}
+
+\end{slide}
+\begin{slide}
+\subsection{Le hachage}
+
+On d\'efinit un $hash\ cluster$ d\'ecrivant les 
+caract\'eristiques physiques de la table\,:
+\begin{verbatim}
+CREATE CLUSTER hash-cinéma (ID-cinéma NUMBER(10))
+   HASH IS ID-cinéma HASHKEYS 1 000 SIZE 2K
+\end{verbatim} 
+$HASH\ IS$ (optionnel) sp\'ecifie la cl\'e \`a hacher. \\
+$HASHKEYS$ est le nombre de valeurs de la cl\'e de hachage.\\
+$SIZE$ est la taille d'un n-uplet.
+ORACLE d\'etermine le nombre de pages allou\'ees, ainsi que la fonction
+de hachage.
+On fait r\'ef\'erence au $hash\ cluster$ en cr\'eant une table.
+\end{slide}
+% \end{slide}%
+% LocalWords:  relation-exem.ps FNOM FADRESSE Abounayan Meudon Cima Preblocs DB
+% LocalWords:  Gennevilliers Sarnaco PNOM COUTS COMDE Ivry Courbevoie QUANTITE
+% LocalWords:  fourcli.ps Nuplet arit\'e d'arit\'e d'Attributs COUT CADRESSE to
+% LocalWords:  FPCC maj l'Alg\`ebre unaires nuplet concat\`ene  width NUM S.A
+% LocalWords:  R.A R.B nuplets Qu'est-ce peut-on Ingres \'Equijointure S.B FIND
+% LocalWords:  d'\'Equijointure Durand Papin parpaings.ps PRODUIT.pnom ANY GET
+% LocalWords:  FIRST WITHIN OWNER PRINT CLIENT.cnom CLIENT.cadresse NEXT em RBE
+% LocalWords:  ensembliste Semijointure semijointure dupliqu\'es QTE PROD c.a.d
+% LocalWords:  archi-optim.ps QBE n'appara qu ANNEE re division.ps
+
+
+
+

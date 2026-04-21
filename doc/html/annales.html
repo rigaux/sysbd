@@ -1,0 +1,818 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>12. Annales des examens &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="prev" title="11. Reprise sur panne" href="rp.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;12. &lt;/span&gt;Annales des examens</a></div>
+        <div class="rel">
+          <a href="rp.html" title="11. Reprise sur panne"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="annales-des-examens">
+<span id="chap-annales"></span><h1><span class="section-number">12. </span>Annales des examens<a class="headerlink" href="#annales-des-examens" title="Lien permanent vers ce titre">¶</a></h1>
+<section id="examen-blanc-du-20-janvier-2020-sans-concurrence">
+<h2>Examen blanc du 20 janvier 2020 (sans concurrence)<a class="headerlink" href="#examen-blanc-du-20-janvier-2020-sans-concurrence" title="Lien permanent vers ce titre">¶</a></h2>
+<section id="stockage-et-indexation">
+<h3>Stockage et indexation<a class="headerlink" href="#stockage-et-indexation" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On veut stocker un fichier <em>F</em> avec 120000 enregistrements d’une taille fixe de
+100 octets par article.</p>
+<p>Questions :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>De combien de blocs a-t-on besoin au minimum pour  stocker tout
+le fichier si la taille d’un bloc est 8192 octets, sachant
+que chaque bloc contient un entête de 150 octets
+et qu’un enregistrement ne peut pas chevaucher 2 blocs?</p></li>
+</ul>
+<blockquote>
+<div></div></blockquote>
+<ul class="simple">
+<li><p>On suppose maintenant que <em>F</em> est indexé par un index non dense
+sur <code class="docutils literal notranslate"><span class="pre">A</span></code>  et  un index dense sur un autre champ <code class="docutils literal notranslate"><span class="pre">B</span></code>. On peut
+stocker 100 entrées dans un bloc d’index et aucune place libre n’est laissée dans les blocs.
+Combien d’entrées y a-t-il dans les feuilles de l’index non dense?
+dans les feuilles de l’index dense?</p></li>
+</ul>
+<blockquote>
+<div></div></blockquote>
+<ul>
+<li><p>Supposons que l’index non dense a deux niveaux, racine
+comprise, et que seule la racine est en mémoire.  On se place dans le pire
+des cas où il faut une lecture physique  pour lire une feuille d’index et une autre pour
+lire un bloc du fichier.</p>
+<p>On cherche les enregistrements pour lesquels la
+valeur de l’attribut  <code class="docutils literal notranslate"><span class="pre">A</span></code> est comprise entre P1A3 et P3G5. On
+suppose qu’il y a moins de 100 enregistrements tels que <code class="docutils literal notranslate"><span class="pre">A</span></code>
+commençe par P. Combien de lectures coûte la recherche par l’index dans le pire
+des cas?</p>
+</li>
+</ul>
+<blockquote>
+<div></div></blockquote>
+<ul class="simple">
+<li><p>Même question avec l’index dense, pour une recherche sur l’attribut
+<code class="docutils literal notranslate"><span class="pre">B</span></code>.</p></li>
+</ul>
+<blockquote>
+<div></div></blockquote>
+</div></blockquote>
+</section>
+<section id="index-et-optimisation">
+<h3>Index et optimisation<a class="headerlink" href="#index-et-optimisation" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Soit les tables relationnelles suivantes (les attributs qui forment
+une clé sont en gras):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Produits  (<strong>code</strong>, marque, desig, descr). NB:  code : identifiant du produit, marque : marque du produit,
+desig : désignation du produit, descr : description.</p></li>
+<li><p>PrixFour (<strong>code, nom</strong>, prix). NB: code : code du produit, nom : nom du fournisseur.</p></li>
+<li><p>NoteMag    (<strong>code, titre</strong>, note). NB: code : code du produit,  titre : titre du magazine,
+note : note entre 1 et 10 du produit dans le magazine)</p></li>
+</ul>
+</div></blockquote>
+<p>Voici une instance de la table NoteMag.</p>
+<blockquote>
+<div><table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Code</p></th>
+<th class="head"><p>Titre</p></th>
+<th class="head"><p>Note</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>“A345”</p></td>
+<td><p>“HIFI”</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>“P123”</p></td>
+<td><p>“Audio Expert”</p></td>
+<td><p>6</p></td>
+</tr>
+<tr class="row-even"><td><p>“X254”</p></td>
+<td><p>“HIFI”</p></td>
+<td><p>7</p></td>
+</tr>
+<tr class="row-odd"><td><p>“K783”</p></td>
+<td><p>“Son &amp; Audio”</p></td>
+<td><p>3</p></td>
+</tr>
+<tr class="row-even"><td><p>“P345”</p></td>
+<td><p>“HIFI”</p></td>
+<td><p>6</p></td>
+</tr>
+<tr class="row-odd"><td><p>“P512”</p></td>
+<td><p>“Audio Expert”</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-even"><td><p>“L830”</p></td>
+<td><p>“Audio Expert”</p></td>
+<td><p>8</p></td>
+</tr>
+<tr class="row-odd"><td><p>“M240”</p></td>
+<td><p>“”HIFI””</p></td>
+<td><p>6</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>La table occupe plusieurs blocs  dont chacun peut contenir au maximum 3
+n-uplets.</p>
+<blockquote>
+<div><ul>
+<li><p>Construire un arbre B+ sur l’attribut <code class="docutils literal notranslate"><span class="pre">code</span></code>,
+avec 4 entrées par bloc au maximum.</p></li>
+<li><p>Est-il utile d’indexer l’attribut <code class="docutils literal notranslate"><span class="pre">titre</span></code>? Pourquoi?</p></li>
+<li><p>Soit la requête suivante :</p>
+<blockquote>
+<div><div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span> <span class="n">NoteMag</span>
+<span class="k">where</span> <span class="n">code</span> <span class="k">between</span> <span class="s1">&#39;A000&#39;</span> <span class="k">and</span> <span class="s1">&#39;X000&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p>Pour évaluer cette requête, on suppose que le tampon de lecture ne peut
+contenir qu’un seul bloc et l” index tient en mémoire. Dans ce cas, est-ce
+qu’il est préférable d’utiliser l’index ou de parcourir la table
+séquentiellement ? Pourquoi ?</p>
+</li>
+</ul>
+</div></blockquote>
+<p>On donne ci-dessous une requête SQL et le plan d’exécution fourni par Oracle :</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">desig</span><span class="p">,</span> <span class="n">marque</span><span class="p">,</span> <span class="n">prix</span>
+<span class="k">from</span> <span class="n">Produits</span><span class="p">,</span> <span class="n">PrixFour</span><span class="p">,</span> <span class="n">NoteMag</span>
+<span class="k">where</span> <span class="n">Produits</span><span class="p">.</span><span class="n">code</span><span class="o">=</span><span class="n">PrixFour</span><span class="p">.</span><span class="n">code</span>
+<span class="k">and</span> <span class="n">Produits</span><span class="p">.</span><span class="n">code</span><span class="o">=</span><span class="n">NoteMag</span><span class="p">.</span><span class="n">code</span>
+<span class="k">and</span> <span class="n">note</span> <span class="o">&gt;</span> <span class="mi">8</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Plan d’exécution :</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+   1 MERGE JOIN
+      2 SORT JOIN
+         3 NESTED LOOPS
+            4 TABLE ACCESS FULL NOTEMAG
+            5 TABLE ACCESS BY INDEX ROWID PRODUITS
+               6 INDEX UNIQUE SCAN A34561
+      7 SORT JOIN
+         8 TABLE ACCESS FULL PRIXFOUR
+</pre></div>
+</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Existe-t-il un index ? sur quel(s) attribut(s) de quel(s) table(s) ?</p></li>
+<li><p>Algorithme de jointure : Expliquer en détail le plan d’exécution (accès
+aux tables, sélections, jointure, projections)</p></li>
+<li><p>Ajout d’index : On crée un index sur l’attribut <code class="docutils literal notranslate"><span class="pre">note</span></code>  de la table
+<code class="docutils literal notranslate"><span class="pre">NoteMag</span></code>. Expliquez les améliorations en
+terme de plan d’exécution apportées par la création de cet index.</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="examen-blanc-juin-2020">
+<h2>Examen blanc juin 2020<a class="headerlink" href="#examen-blanc-juin-2020" title="Lien permanent vers ce titre">¶</a></h2>
+<p>On prend pour exemple une base de données
+qui sert à la gestion d’un site web de diffusion de la musique en <em>streaming</em>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Abonné (id, nom, prénom, typeAbonnement, dateDébut)</p></li>
+<li><p>Artiste (id, nom, prénom, nationalité)</p></li>
+<li><p>Album (id, nom, idArtiste, annéeSortie)</p></li>
+<li><p>Chanson (id, nom, idAlbum)</p></li>
+<li><p>Ecoute (idAbonné, idChanson, date, téléchargé)</p></li>
+</ul>
+</div></blockquote>
+<p>L’abonnement est sans engagement: seulement la date de début est nécessaire pour
+un abonnement en cours. Le type d’un abonnement peut être:
+“free” (financé par la publicité), “normal” et “premium”
+(donne le droit de télécharger la musique en local pour une écoute
+hors connexion). L’attribut “téléchargé” vaut vrai ou faux.
+Un abonné peut avoir écouté une chanson plusieurs fois (à des dates différentes).</p>
+<p>Le SGBD crée un index sur les clés primaires, mais pas sur les clés étrangères.</p>
+<section id="questions-sur-le-schema-3-points">
+<h3>Questions sur le schéma (3 points)<a class="headerlink" href="#questions-sur-le-schema-3-points" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
+<li><p>Pour la table Ecoute,
+identifiez les clés primaires et étrangères.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Donnez la commande SQL pour créer la table Ecoute.</p></li>
+<li><p>Une recherche par index est-elle possible si on interroge la table Ecoute sur l’id
+d’une chanson (justifier)?</p></li>
+<li><p>Une recherche par index est-elle possible si on interroge la table Ecoute sur l’id
+d’un abonné (justifier)?</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="stockage-et-indexation-4-points">
+<h3>Stockage et indexation (4 points)<a class="headerlink" href="#stockage-et-indexation-4-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On insère successivement les enregistrements suivants dans la table Artiste, selon cet ordre :</p>
+<blockquote>
+<div><table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 29%" />
+<col style="width: 29%" />
+<col style="width: 29%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Id</p></th>
+<th class="head"><p>Nom</p></th>
+<th class="head"><p>Prénom</p></th>
+<th class="head"><p>Nationalité</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p>Moustaki</p></td>
+<td><p>Georges</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p>Modja</p></td>
+<td><p>Inna</p></td>
+<td><p>malienne</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p>LeForestier</p></td>
+<td><p>Maxime</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>4</p></td>
+<td><p>Vian</p></td>
+<td><p>Boris</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-even"><td><p>5</p></td>
+<td><p>DePalmas</p></td>
+<td><p>Gérald</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>6</p></td>
+<td><p>June</p></td>
+<td><p>Valérie</p></td>
+<td><p>américaine</p></td>
+</tr>
+<tr class="row-even"><td><p>7</p></td>
+<td><p>Higelin</p></td>
+<td><p>Jacques</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>8</p></td>
+<td><p>Berger</p></td>
+<td><p>Michel</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-even"><td><p>9</p></td>
+<td><p>Goldman</p></td>
+<td><p>Jean-Jacques</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>10</p></td>
+<td><p>Mitchell</p></td>
+<td><p>Eddy</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-even"><td><p>11</p></td>
+<td><p>Katerine</p></td>
+<td><p>Philippe</p></td>
+<td><p>française</p></td>
+</tr>
+<tr class="row-odd"><td><p>12</p></td>
+<td><p>Estefan</p></td>
+<td><p>Gloria</p></td>
+<td><p>cubaine</p></td>
+</tr>
+<tr class="row-even"><td><p>13</p></td>
+<td><p>Marley</p></td>
+<td><p>Bob</p></td>
+<td><p>jamaicaine</p></td>
+</tr>
+<tr class="row-odd"><td><p>14</p></td>
+<td><p>Azrié</p></td>
+<td><p>Abed</p></td>
+<td><p>française</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>On met en place un index sur l’attribut <code class="docutils literal notranslate"><span class="pre">nom</span></code> de cette table.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Construire l’arbre B d’ordre 2 (4 entrées max par bloc) correspondant à cet ensemble d’enregistrements,
+en respectant l’ordre d’insertion. Donner les étapes de construction
+intermédiaires importantes (celles qui produisent un changement de la structure de l’arbre).</p></li>
+<li><p>On considère que cet arbre B est stocké à raison d’un nœud
+par bloc sur disque. On recherche les noms des artistes dont
+l’initiale du nom se trouve entre “B” et “I” (inclus).
+Combien de blocs disque doivent être chargées au minimum pour répondre
+à cette requête en utilisant l’arbre B+ ? Justifier.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="optimisation-7-points">
+<h3>Optimisation (7 points)<a class="headerlink" href="#optimisation-7-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Soit la requête suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">Album</span><span class="p">.</span><span class="n">nom</span>
+<span class="k">from</span> <span class="n">Artiste</span><span class="p">,</span> <span class="n">Album</span>
+<span class="k">where</span> <span class="n">Artiste</span><span class="p">.</span><span class="n">id</span><span class="o">=</span><span class="n">Album</span><span class="p">.</span><span class="n">idArtiste</span>
+<span class="k">and</span> <span class="n">Artiste</span><span class="p">.</span><span class="n">nom</span><span class="o">=</span><span class="s1">&#39;Moustaki&#39;</span>
+</pre></div>
+</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donnez le plan d’exécution sous la forme de votre choix, en supposant
+que les seuls index sont ceux sur les clés primaires</p></li>
+<li><p>Qu’est-ce qui change si on crée l’index sur le nom des artistes?</p></li>
+</ul>
+</div></blockquote>
+<p>Soit maintenant le plan d’exécution suivant:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+    1*   MERGE JOIN
+    2      SORT JOIN
+    3*        NESTED LOOPS
+    4*          TABLE ACCESS FULL           Ecoute
+    5           TABLE ACCESS BY ROWID       Chanson
+    6              INDEX RANGE SCAN         IDX-Chanson_ID
+    7      SORT JOIN
+    8         TABLE ACCESS FULL             Album
+
+    1 - access(Chanson.id_album=Album.id)
+    3 - access(Ecoute.id_chanson=Chanson.id)
+    4 - access(date=29/05/2013)
+</pre></div>
+</div>
+<p>Questions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donnez la requête correspondante</p></li>
+<li><p>Expliquez ce plan, en indiquant notamment quels index existent, et lesquels
+n’existent pas</p></li>
+<li><p>Quels index pouvez-vous ajouter pour optimiser cette requête, et quel est le plan d’exécution
+correspondant?</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="concurrence-6-points">
+<h3>Concurrence (6 points)<a class="headerlink" href="#concurrence-6-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Soit l’exécution concurrente suivante :</p>
+<div class="math notranslate nohighlight">
+\[H = r_2[x] r_3[x] w_1[y] r_3[y] w_3[y] r_1[z] w_2[y] c_1 w_3[z] w_2[z] c_3 c_2\]</div>
+<p>Questions</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donner la liste des conflits de H</p></li>
+<li><p>Donner le graphe de sérialisation de H. Que pouvez-vous déduire de ce graphe ?</p></li>
+<li><p>Donner l’exécution  finale obtenue par application de l’algorithme de verrouillage
+à deux phases. Donner le détail du déroulement de l’algorithme.</p></li>
+<li><p>Que se passerait-il si on ne posait que des verrous exclusifs?</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="examen-juin-2022">
+<h2>Examen juin 2022<a class="headerlink" href="#examen-juin-2022" title="Lien permanent vers ce titre">¶</a></h2>
+<section id="stockage-et-indexation-6-points">
+<h3>Stockage et indexation (6 points)<a class="headerlink" href="#stockage-et-indexation-6-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Voici le contenu d’un fichier  <code class="docutils literal notranslate"><span class="pre">animaux</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>(jaguar, 17), (chameau, 22), (gnou, 1), (girafe, 13), (chat, 3),
+(lion, 8), (dauphin, 40), (zèbre, 11), (hamster, 6), (hyène,9),
+(licorne, 2), (babouin, 12), (piranha,55), (saumon, 82), (bar,44),
+(anguille, 43), (gorille,98), (tigre,76), (requin, 56), (escargot,45).
+</pre></div>
+</div>
+<p>On suppose que l’on peut placer  2 enregistrements par bloc.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>On veut construire un index non-dense sur le premier attribut.
+Que faut-il faire au préalable ? Donnez les différents niveaux de l’index.</p></li>
+<li><p>Construire un arbre B sur le second attribut,
+en supposant 2 enregistrements et trois pointeurs par bloc <em>au maximum</em>.</p></li>
+<li><p>On dispose des deux index ci-dessus. Quel est le
+nombre d’entrées/sorties <em>dans le pire des cas</em>
+pour la recherche des animaux dont le nom commence par un “g”,
+et pour la recherche des animaux dont l’identifiant est compris
+entre 40 et 50 (prendre en compte les accès à l’index <em>et</em>
+au fichier).</p></li>
+<li><p>On veut trier ce fichier (tel qu’il est donné dans l’énoncé)
+avec seulement 3 blocs, toujours
+en supposant qu’on peut placer deux enregistrements par bloc.
+Décrivez le déroulement de l’algorithme de tri-fusion,
+et donnez le nombre total d’entrées/sorties, sans compter
+l’écriture finale du fichier trié.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="jointures-et-optimisation-9-points">
+<h3>Jointures et optimisation (9 points)<a class="headerlink" href="#jointures-et-optimisation-9-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On considère trois relations
+<span class="math notranslate nohighlight">\(R(**{a},b,d)\)</span>, <span class="math notranslate nohighlight">\(S(**{c},d,e)\)</span> et <span class="math notranslate nohighlight">\(T(**{e},f)\)</span> dont les clés
+primaires sont respectivement <span class="math notranslate nohighlight">\(a\)</span>, <span class="math notranslate nohighlight">\(c\)</span> et <span class="math notranslate nohighlight">\(e\)</span>.
+<span class="math notranslate nohighlight">\(R\)</span> contient 200 000 enregistrements, <span class="math notranslate nohighlight">\(S\)</span>  20 enregistrements et <span class="math notranslate nohighlight">\(T\)</span> 500 enregistrements. Des index
+sont créés sur les clés primaires, et on suppose que
+pour chaque relation, y compris celles qui sont calculées par une jointure,
+on stocke 10 enregistrements par bloc.</p>
+<p>On suppose que tous les index sont toujours en mémoire principale
+(donc pas d’entrée/sortie pour les accès aux index).
+On dispose de 20 blocs en mémoire pour traiter les jointures.
+Les jointures se font sur les attributs de même nom.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Quel est le nombre maximal
+d’enregistrements dans <span class="math notranslate nohighlight">\(S \Join T\)</span> (indiquez également la condition
+pour que ce nombre maximal soit atteint) ? Quelle est la clé de la
+relation obtenue ?</p></li>
+<li><p>Mêmes questions pour <span class="math notranslate nohighlight">\(R \Join S \Join T\)</span>.</p></li>
+<li><p>Décrire le fonctionnement de l’algorithme par boucles
+imbriquées pour calculer <span class="math notranslate nohighlight">\(S \Join T\)</span>, en exploitant au mieux la
+mémoire disponible.
+Indiquez le coût en entrées/sorties pour cet algorithme.</p></li>
+<li><p>Même question l’algorithme par boucles
+imbriquées <em>indexées</em>.</p></li>
+<li><p>Décrire un plan d’exécution
+pour calculer <span class="math notranslate nohighlight">\(R \Join S \Join T\)</span>et
+évaluer son coût (nombre de blocs lus).</p></li>
+<li><p>Une application a inséré des enregistrements dans <span class="math notranslate nohighlight">\(S\)</span>
+qui en contient maintenant 5 000. Le
+SGBD gère un histogramme qui indique que la sélectivité
+de l’attribut <span class="math notranslate nohighlight">\(d\)</span> est 5 (autrement dit, une sélection
+sur <span class="math notranslate nohighlight">\(R\)</span> ou <span class="math notranslate nohighlight">\(S\)</span> pour une valeur de <span class="math notranslate nohighlight">\(d\)</span> ramène 5% des enregistrements).
+Quelle taille peut-on estimer pour <span class="math notranslate nohighlight">\(R \Join S\)</span> ?</p></li>
+<li><p>Je n’ai toujours que 20 blocs en mémoire.
+Décrire l’algorithme de jointure par hachage pour <span class="math notranslate nohighlight">\(R \Join S\)</span>
+et évaluer son coût.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="id1">
+<h3>Concurrence (6 points)<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On considère le système d’information
+d’un institut de sondage, avec les tables relationnelles
+suivantes (les attributs ou combinaisons d’attributs qui forment
+une clé unique sont <strong>en gras</strong>).</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Personne (<strong>numPers</strong>, nom, sexe, numCat)</p></li>
+<li><p>Question (<strong>numQ</strong>, description)</p></li>
+<li><p>Avis (<strong>numQ, numPers</strong>, reponse)</p></li>
+</ul>
+</div></blockquote>
+<p>L’exécution suivante est reçue par le système de l’institut de sondage :</p>
+<div class="math notranslate nohighlight">
+\[H : r_1[x] r_2[y] w_1[x] r_3[y]  r_2[x] w_3[y] r_2[z] C_1 r_3[z] w_2[z] C_2 w_3[z] C_3\]</div>
+<p>Répondez aux questions suivantes sur <span class="math notranslate nohighlight">\(H\)</span>.</p>
+<blockquote>
+<div><ul>
+<li><p>Parmi les programmes qui s’exécutent dans le système,
+il y a <code class="docutils literal notranslate"><span class="pre">ModifierAvis(nomPers,</span> <span class="pre">numQuestion,</span> <span class="pre">nouvelle_réponse)</span></code>,  qui modifie
+la réponse donnée par
+la personne <code class="docutils literal notranslate"><span class="pre">nomPers</span></code> à  la question <code class="docutils literal notranslate"><span class="pre">numQuestion</span></code>
+en <code class="docutils literal notranslate"><span class="pre">nouvelle\_réponse</span></code></p>
+<p>Si les enregistrements de <span class="math notranslate nohighlight">\(H\)</span> sont des nuplets des relations de la base
+de données, montrez (en justifiant votre réponse)
+quelles transactions de <span class="math notranslate nohighlight">\(H\)</span> pourraient provenir de <code class="docutils literal notranslate"><span class="pre">ModifierAvis</span></code>.</p>
+</li>
+<li><p>Vérifiez si <span class="math notranslate nohighlight">\(H\)</span> est sérialisable en identifiant
+les conflits et en construisant le graphe de sérialisation.</p></li>
+<li><p>Montrer qu’il existe des lectures sales,
+et expliquez les conséquences possibles.</p></li>
+<li><p>Quelle est l’exécution obtenue par verrouillage
+à deux phases à partir de <span class="math notranslate nohighlight">\(H\)</span>?</p></li>
+<li><p>(<strong>Question bonus, pour 2 points</strong>). Quelle est l’exécution obtenue avec
+l’algorithme de concurrence par versionnement ?
+On suppose que toutes les transactions débutent
+au même moment.</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="examen-juin-2023">
+<h2>Examen juin 2023<a class="headerlink" href="#examen-juin-2023" title="Lien permanent vers ce titre">¶</a></h2>
+<p>On prend pour exemple  l’extrait suivant de la base de données qui sert à la gestion d’une grande
+bibliothèque :</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Livre (id, titre, id_auteur, date_publication, catégorie, éditeur)</p></li>
+<li><p>Emprunt (id_personne, id_livre, date_début, date_fin)</p></li>
+<li><p>Personne  (id, nom, prénom, âge)</p></li>
+</ul>
+</div></blockquote>
+<section id="stockage-et-indexation-6-pts">
+<h3>Stockage et indexation (6 pts)<a class="headerlink" href="#stockage-et-indexation-6-pts" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
+<li><p>Pour la table Livre, identifiez les clés primaires et étrangères.</p></li>
+<li><p>Donnez la commande SQL pour créer la table Livre.</p></li>
+<li><p>On  suppose que chaque enregistrement a une taille de
+250 octets et que chaque bloc a un entête de 150 octets.
+Indiquez le nombre de blocs nécessaires si la table
+contient 3 millions de livres. La taille d’un bloc est de 4 000 octets.</p></li>
+<li><p>On décide de trier la table Livre sur la date de publication et de construire
+un index non-dense à un niveau. Combien contient-t-il d’entrées,
+Sachant qu’une adresse et une date occupent chacun 8 octets, combien d’entrées met-on dans
+un bloc et combien de blocs sont nécessaires ?</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="indexation-4-points">
+<h3>Indexation (4 points)<a class="headerlink" href="#indexation-4-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On insère successivement les enregistrements suivants dans la table
+<code class="docutils literal notranslate"><span class="pre">Personne</span></code>, selon cet ordre :</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 13%" />
+<col style="width: 38%" />
+<col style="width: 38%" />
+<col style="width: 13%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>id</p></th>
+<th class="head"><p>nom</p></th>
+<th class="head"><p>prénom</p></th>
+<th class="head"><p>âge</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p>Martin</p></td>
+<td><p>Georges</p></td>
+<td><p>30</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p>Dubois</p></td>
+<td><p>Inna</p></td>
+<td><p>20</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p>Thomas</p></td>
+<td><p>Maxime</p></td>
+<td><p>14</p></td>
+</tr>
+<tr class="row-odd"><td><p>4</p></td>
+<td><p>Richard</p></td>
+<td><p>Boris</p></td>
+<td><p>45</p></td>
+</tr>
+<tr class="row-even"><td><p>5</p></td>
+<td><p>Petit</p></td>
+<td><p>Gérald</p></td>
+<td><p>32</p></td>
+</tr>
+<tr class="row-odd"><td><p>6</p></td>
+<td><p>Durand</p></td>
+<td><p>Valérie</p></td>
+<td><p>43</p></td>
+</tr>
+<tr class="row-even"><td><p>7</p></td>
+<td><p>Leroy</p></td>
+<td><p>Jacques</p></td>
+<td><p>34</p></td>
+</tr>
+<tr class="row-odd"><td><p>8</p></td>
+<td><p>Simon</p></td>
+<td><p>Michel</p></td>
+<td><p>22</p></td>
+</tr>
+<tr class="row-even"><td><p>9</p></td>
+<td><p>Laurent</p></td>
+<td><p>Jean-Jacques</p></td>
+<td><p>63</p></td>
+</tr>
+<tr class="row-odd"><td><p>10</p></td>
+<td><p>Moreau</p></td>
+<td><p>Eddie</p></td>
+<td><p>12</p></td>
+</tr>
+<tr class="row-even"><td><p>11</p></td>
+<td><p>Morel</p></td>
+<td><p>Philippe</p></td>
+<td><p>15</p></td>
+</tr>
+<tr class="row-odd"><td><p>12</p></td>
+<td><p>Perrin</p></td>
+<td><p>Gloria</p></td>
+<td><p>18</p></td>
+</tr>
+<tr class="row-even"><td><p>13</p></td>
+<td><p>Clement</p></td>
+<td><p>Bob</p></td>
+<td><p>19</p></td>
+</tr>
+<tr class="row-odd"><td><p>14</p></td>
+<td><p>Dumont</p></td>
+<td><p>Claire</p></td>
+<td><p>67</p></td>
+</tr>
+</tbody>
+</table>
+<p>On met en place un index sur l’attribut <strong>âge</strong> de cette table.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Construire l’arbre B d’ordre <strong>2</strong> (4 entrées par bloc)
+correspondant à cet ensemble d’articles, en respectant l’ordre d’arrivée.
+Donner les étapes de construction intermédiaires importantes (celles qui produisent
+un changement de la structure de l’arbre).</p></li>
+<li><p>On considère que cet arbre B  est stocké à raison d’un nœud par bloc sur disque. On recherche les noms des personnes dont l’âge est entre 20 et 40 ans (inclus).
+Combien de blocs disque doivent être chargés au pire des cas pour répondre à cette requête en utilisant l’arbre B ? Justifier.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="optimisation-6-points">
+<h3>Optimisation (6 points)<a class="headerlink" href="#optimisation-6-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On suppose que seules les clés primaires sont indexées.</p>
+<blockquote>
+<div><blockquote>
+<div><ul>
+<li><p>Soit la requête suivante:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">p</span><span class="p">.</span><span class="n">nom</span><span class="p">,</span> <span class="n">p</span><span class="p">.</span><span class="n">prénom</span>
+<span class="k">from</span> <span class="n">Livre</span> <span class="k">as</span> <span class="n">l</span><span class="p">,</span><span class="n">Personne</span> <span class="k">as</span> <span class="n">p</span>
+<span class="k">where</span> <span class="n">l</span><span class="p">.</span><span class="n">titre</span> <span class="o">=</span> <span class="ss">&quot;Bilbo&quot;</span>
+<span class="k">and</span> <span class="n">l</span><span class="p">.</span><span class="n">id_auteur</span> <span class="o">=</span> <span class="n">p</span><span class="p">.</span><span class="n">id</span>
+</pre></div>
+</div>
+<p>Donnez le plan d’exécution classique des boucles imbriquées indexées.</p>
+</li>
+</ul>
+</div></blockquote>
+<ul>
+<li><p>On considère maintenant la requête suivante, avec une jointure entre <code class="docutils literal notranslate"><span class="pre">Livre</span></code>    et <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code></p>
+<blockquote>
+<div><div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">e</span><span class="p">.</span><span class="n">date_debut</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">date_fin</span>
+<span class="k">from</span> <span class="n">Livre</span> <span class="k">as</span> <span class="n">l</span><span class="p">,</span> <span class="n">Emprunt</span> <span class="k">as</span> <span class="n">e</span>
+<span class="k">where</span>  <span class="n">l</span><span class="p">.</span><span class="n">titre</span> <span class="o">=</span> <span class="ss">&quot;Bilbo&quot;</span>
+<span class="k">and</span> <span class="n">e</span><span class="p">.</span><span class="n">id_livre</span> <span class="o">=</span> <span class="n">l</span><span class="p">.</span><span class="n">id</span>
+</pre></div>
+</div>
+<p>Donner de même le plan d’exécution utilisant le plus possible les index
+et indiquer où se situe la sélection sur le titre.</p>
+<ul class="simple">
+<li><p>Peut-on éviter tout parcours séquentiel en ajoutant un index sur
+le titre des livres ? Justifiez votre réponse.</p></li>
+</ul>
+<ul class="simple">
+<li><p>On suppose qu’il n’y a pas d’index sur la table <code class="docutils literal notranslate"><span class="pre">Livre</span></code>.
+Elle occupe 50 MO, alors que la table <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code> en occupe 200.
+Le système dispose de 100 MO de mémoire RAM pour effectuer la jointure.
+Expliquer  l’algorithme de jointure qui vous semble le plus efficace.
+Combien de MOs seront lus au final ?</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+</section>
+<section id="concurrence-4-points">
+<h3>Concurrence (4 points)<a class="headerlink" href="#concurrence-4-points" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Soit l’exécution concurrente suivante</p>
+<p><span class="math notranslate nohighlight">\(H = r_1[x] r_2[x] r_3[y] w_1[x] w_1[z] c_1 w_2[y] c_2 w_3[z] c_3\)</span></p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donner la liste des conflits de H</p></li>
+<li><p>Donner le graphe de sérialisation de <span class="math notranslate nohighlight">\(H\)</span>.
+Que pouvez-vous déduire de ce graphe?</p></li>
+<li><p>Donner l’exécution finale par application de l’algorithme de verrouillage
+à deux phases.  Donner le détail du déroulement de l’algorithme.</p></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opalgo.html">6. Opérateurs et algorithmes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">12. Annales des examens</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#examen-blanc-du-20-janvier-2020-sans-concurrence">Examen blanc du 20 janvier 2020 (sans concurrence)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#stockage-et-indexation">Stockage et indexation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#index-et-optimisation">Index et optimisation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examen-blanc-juin-2020">Examen blanc juin 2020</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#questions-sur-le-schema-3-points">Questions sur le schéma (3 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stockage-et-indexation-4-points">Stockage et indexation (4 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optimisation-7-points">Optimisation (7 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#concurrence-6-points">Concurrence (6 points)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examen-juin-2022">Examen juin 2022</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#stockage-et-indexation-6-points">Stockage et indexation (6 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jointures-et-optimisation-9-points">Jointures et optimisation (9 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Concurrence (6 points)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examen-juin-2023">Examen juin 2023</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#stockage-et-indexation-6-pts">Stockage et indexation (6 pts)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#indexation-4-points">Indexation (4 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optimisation-6-points">Optimisation (6 points)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#concurrence-4-points">Concurrence (4 points)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="rp.html" title="11. Reprise sur panne"
+             >précédent</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;12. &lt;/span&gt;Annales des examens</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>

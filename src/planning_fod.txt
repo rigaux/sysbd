@@ -1,0 +1,25 @@
+Voici une proposition de plan d'avancement, avec les visios programmées
+
+23 février -> visio de présentation du cours
+
+7 mars -> Dispositifs de stockage (chap 2)
+
+16 mars -> Index et arbre B (chap 3)
+
+28 mars -> Hachage (chap 4)
+
+31 mars: premier devoir à rendre (stockage et indexation)
+
+13 avril -> Opérateurs et algorithmes (chap 6)
+
+25 avril -> Evaluation et optimisation (chap 7)
+
+30 avril: second devoir à rendre (évaluation de requêtes)
+
+11 mai -> Transactions
+
+23 mai -> Concurrence accès
+
+31 mai: troisième de voir à rendre (concurrence)
+
+15 juin -> Révisions (exameen blanc)

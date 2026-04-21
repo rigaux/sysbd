@@ -1,0 +1,19 @@
+Sans expressions régulières
+
+{\em -> \emph{
+{\it -> \textit{
+{\bf -> \textbf{
+<< -> "
+>> -> "
+
+Avec expressions régulières
+
+\\attr\{((\w|\s|,)*)\} -> ``$1``
+\\ref\{((\w|\s|,|-)*)\} -> :ref:`$1`
+\\emph\{((\w|\s|,|-)*)\} -> *$1*
+\\textit\{((\w|\s|,)*)\} -> *$1*
+\\textsc\{((\w|\s|,)*)\} -> *$1*
+\$(.)*\$ -> :math:`$1` 
+\\guill\{((\w|\s|,)*)\} -> "$1"
+\\sqlcom\{((\w|\s|,)*)\} -> ``$1``
+\\film\{((\w|\s|,)*)\} -> *1*

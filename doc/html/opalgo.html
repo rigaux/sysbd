@@ -1,0 +1,2112 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>6. Opérateurs et algorithmes &#8212; Documentation Cours de bases de données Février 2024</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/agogo.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/translations.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Recherche" href="search.html" />
+    <link rel="next" title="7. Evaluation et optimisation" href="optim.html" />
+    <link rel="prev" title="5. Moteurs de stockage" href="moteurs.html" /> 
+  </head><body>
+    <div class="header-wrapper">
+      <div class="header">
+        <div class="headertitle"><a
+          href="index.html">&lt;span class=&#34;section-number&#34;&gt;6. &lt;/span&gt;Opérateurs et algorithmes</a></div>
+        <div class="rel">
+          <a href="moteurs.html" title="5. Moteurs de stockage"
+             accesskey="P">précédent</a><font color="white"> |</font>
+          <a href="optim.html" title="7. Evaluation et optimisation"
+             accesskey="N">suivant</a><font color="white"> |</font>
+          <a href="genindex.html" title="Index général"
+             accesskey="I">index</a>
+        </div>
+       </div>
+    </div>
+
+<script type="text/javascript" src="_static/dynsite.js"></script>
+
+
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="document">
+            
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="operateurs-et-algorithmes">
+<span id="chap-opalgo"></span><h1><span class="section-number">6. </span>Opérateurs et algorithmes<a class="headerlink" href="#operateurs-et-algorithmes" title="Lien permanent vers ce titre">¶</a></h1>
+<p>Une des tâches essentielles d’un SGBD est d’exécuter les requêtes SQL
+soumises par une application afin de fournir le résultat avec le
+meilleur temps d’exécution possible. La combinaison d’un langage
+de haut niveau, et donc en principe facile d’utilisation, et d’un
+moteur d’exécution puissant, apte à traiter efficacement des requêtes
+extrêmement complexes, est l’un des principaux atouts des SGBD (relationnels).</p>
+<p>Ce chapitre présente les composants de base d’un moteur d’évaluation
+de requêtes: le modèle d’exécution, les
+opérateurs algébriques, et les principaux algorithmes de jointure. Ce sont les briques
+à partir desquels
+un système construit dynamiquement le programme d’exécution d’une requête, également
+appelé <em>plan d’exécution</em>. Dans l’ensemble du chapitre, nous donnons
+une spécification détaillée d’un catalogue d’opérateurs qui permettent
+d’évaluer toutes les requêtes SQL conjonctives (c’est-à-dire sans négation).</p>
+<p>La manière dont le plan d’exécution est construit à la volée quand
+une requête est soumise fait l’objet du chapitre suivant.</p>
+<section id="s1-modele-d-execution-les-iterateurs">
+<h2>S1: Modèle d’exécution: les itérateurs<a class="headerlink" href="#s1-modele-d-execution-les-iterateurs" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sliter.pdf">Diapositives: les itérateurs</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a422c9s35js6h/">Vidéo de présentation du modèle d’exécution</a></p></li>
+</ul>
+</div>
+<p>L’exécution d’une requête s’effectue par combinaison d’opérateurs qui assurent
+chacun une tâche spécialisée. De même qu’une
+requête quelconque peut être représentée par une <em>expression</em> de l’algèbre relationnelle,
+construite à partir de cinq opérations de base,  un <em>plan d’exécution</em> consiste
+à combiner les opérateurs appropriés, tirés d’une petite bibliothèque de composants
+logiciels qui constitue la « boîte à outils » du moteur d’exécution.</p>
+<p>Ces composants ont une forme générique qui se retrouve dans tous les systèmes. D’une manière générale,
+ils se présentent comme des « boîtes noires » qui consomment des
+flux de données en entrées et produisent
+un autre flux de données en sortie. De plus, ces boîtes peuvent s’interconnecter,
+l’entrée de l’une étant la sortie de l’autre. Enfin,
+l’ensemble est conçu pour minimiser
+les resources matérielles nécessaires, et en particulier la mémoire RAM. Nous commençons
+par étudier en détail ce dernier aspect.</p>
+<section id="materialisation-et-pipelinage">
+<h3>Matérialisation et pipelinage<a class="headerlink" href="#materialisation-et-pipelinage" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Imaginons qu’il faille effectuer deux opérations <span class="math notranslate nohighlight">\(o\)</span>
+et <span class="math notranslate nohighlight">\(o'\)</span>  (par
+exemple un parcours d’index suivi d’un accès au fichier) pour évaluer une
+requête.  Une manière naive de procéder est d’exécuter d’abord l’opération <span class="math notranslate nohighlight">\(o\)</span>,
+de stocker le résultat intermédiaire en mémoire <em>cache</em> s’il y a de la place, ou sur
+disque sinon, et d’utiliser le <em>cache</em> ou le fichier intermédiaire
+comme source de données pour <span class="math notranslate nohighlight">\(o'\)</span>.</p>
+<p>Pour notre exemple, le parcours d’index (l’opération
+<span class="math notranslate nohighlight">\(o\)</span>) rechercherait toutes les adresses des
+enregistrements satisfaisant le critère de recherche, et les placerait dans
+une structure temporaire. Puis l’opération <span class="math notranslate nohighlight">\(o'\)</span>  irait lire ces adresses pour
+accéder au fichier de données et fournir finalement les nuplets à l’application
+(<a class="reference internal" href="#iter-materialisation"><span class="std std-numref">Fig. 6.1</span></a>).</p>
+<figure class="align-center" id="id4">
+<span id="iter-materialisation"></span><a class="reference internal image-reference" href="_images/iter-materialisation.png"><img alt="_images/iter-materialisation.png" src="_images/iter-materialisation.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.1 </span><span class="caption-text">Exécution d’une requête avec matérialisation</span><a class="headerlink" href="#id4" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Sur un serveur recevant beaucoup de requêtes,
+la mémoire centrale deviendra rapidement indisponible ou
+trop petite pour accueillir les résultats intermédiaires qui devront donc
+être écrits sur disque. Cette solution de <em>matérialisation</em> des
+résultats intermédiaires est alors très pénalisante car
+les écritures/lectures sur disque répétées entre chaque opération coûtent
+d’autant plus cher en temps que la séquence d’opérations est longue.</p>
+<p>Un autre inconvénient sévère est qu’il faut attendre qu’une
+première opération soit exécutée dans son intégralité avant
+d’effectuer la seconde.</p>
+<p>L’alternative appelée <em>pipelinage</em>  consiste à ne pas
+écrire les enregistrements  produits par  <span class="math notranslate nohighlight">\(o\)</span>
+sur disque mais à les utiliser immédiatement comme entrée de
+<span class="math notranslate nohighlight">\(o'\)</span>. Les deux opérateurs,   <span class="math notranslate nohighlight">\(o\)</span>
+et  <span class="math notranslate nohighlight">\(o'\)</span>,  sont donc connectés, la sortie du premier
+tenant lieu d’entrée au second. Dans ce scénario,
+<span class="math notranslate nohighlight">\(o\)</span>  tient le rôle du producteur,  <span class="math notranslate nohighlight">\(o'\)</span>
+celui du consommateur.
+Chaque fois que <span class="math notranslate nohighlight">\(o\)</span>  produit une adresse d’enregistrement,
+<span class="math notranslate nohighlight">\(o'\)</span>  la reçoit et va lire l’enregistrement dans le fichier
+(<a class="reference internal" href="#iter-pipeline"><span class="std std-numref">Fig. 6.2</span></a>).</p>
+<figure class="align-center" id="id5">
+<span id="iter-pipeline"></span><a class="reference internal image-reference" href="_images/iter-pipeline.png"><img alt="_images/iter-pipeline.png" src="_images/iter-pipeline.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.2 </span><span class="caption-text">Exécution d’une requête avec pipelinage</span><a class="headerlink" href="#id5" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>On n’attend donc pas que <span class="math notranslate nohighlight">\(o\)</span>  soit terminée et
+que l’ensemble des enregistrements  résultat de <span class="math notranslate nohighlight">\(o\)</span>  ait
+été produit pour lancer <span class="math notranslate nohighlight">\(o'\)</span>.
+On peut ainsi combiner l’exécution de plusieurs opérations,
+cette combinaison constituant justement le <em>plan
+d’exécution</em> final.</p>
+<p>Cette méthode a deux
+avantages très importants:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>il n’est pas nécessaire de stocker
+un résultat intermédiaire, puisque ce résultat est consommé
+au fur et à mesure de sa production;</p></li>
+<li><p>l’utilisateur reçoit les premiers nuplets du
+résultat alors même que ce résultat n’est
+pas calculé complètement.</p></li>
+</ul>
+</div></blockquote>
+<p>Si l’application qui reçoit et traite le
+résultat de la requête passe un peu de temps sur
+chaque nuplet produit, l’exécution de la requête
+peut même ne plus constituer
+un facteur pénalisant. Si, par exemple,
+l’application qui demande l’exécution met 0,1 seconde pour traiter chaque nuplet
+alors que le plan d’exécution peut fournir
+20 nuplets par secondes, c’est la première qui constitue
+le point de contention, et le coût de l’exécution
+disparaît dans celui du traitement. Il en irait
+tout autrement s’il fallait d’abord calculer
+<em>tout</em> le résultat avant de lui appliquer le
+traitement: dans ce cas les temps passés dans chaque
+phase <em>s’additionneraient</em>.</p>
+<p>Cette remarque explique une dernière particularité:
+<em>un plan d’exécution se déroule en fonction de la
+demande et pas de l’offre</em>. C’est toujours le consommateur,
+<span class="math notranslate nohighlight">\(o'\)</span>  dans notre exemple, qui « tire » un enregistrement
+de son producteur <span class="math notranslate nohighlight">\(o\)</span>, quand il en a besoin,
+et pas <span class="math notranslate nohighlight">\(o\)</span>  qui « pousse » un enregistrement
+vers <span class="math notranslate nohighlight">\(o'\)</span>  dès qu’il est produit. La justification
+est simplement que le consommateur, <span class="math notranslate nohighlight">\(o'\)</span> ,
+pourrait se retrouver débordé par l’afflux d’information
+sans avoir assez de temps pour les traiter, ni assez de mémoire
+pour les stocker.</p>
+<p>L’application qui exécute une requête est elle-même le consommateur
+ultime et décide du moment où les données doivent lui être communiquées. Elle
+agit en fait comme une sorte d’aspirateur branché sur des tuyaux de données
+qui vont prendre leurs racines dans les structures de stockage de la base
+de données: tables et index.</p>
+<p>Cela se traduit, quand on accède à un SGBD avec un langage de programmation,
+par un mécanisme d’accès toujours identique, consistant à:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>ouvrir un curseur par exécution d’une requête;</p></li>
+<li><p>avancer le curseur sur le résultat, nuplet par nuplet, par des
+appels à une fonction de type <code class="docutils literal notranslate"><span class="pre">next()</span></code>;</p></li>
+<li><p>fermer (optionnel) le curseur quand le résultat a été
+intégralement parcouru.</p></li>
+</ul>
+</div></blockquote>
+<p>Le mécanisme est suggéré sur la  <a class="reference internal" href="#iter-pipeline"><span class="std std-numref">Fig. 6.2</span></a>. L’application
+demande un nuplet par appel à la fonction <em>next()</em> adressé à l’opérateur
+d’accès direct. Ce dernier, pour s’exécuter, a besoin d’une adresse
+d’enregistrement: il l’obtient en adressant lui-même la fonction <em>next()</em>
+à l’opérateur de parcours d’index. Cet exemple simple est en fait une illustration
+du principe fondamental de la constitution d’un plan d’exécution: ce
+dernier est toujours un graphe d’opérateurs produisant <em>à la demande</em> des
+résultats intermédiaires non matérialisés.</p>
+</section>
+<section id="operateurs-bloquants">
+<h3>Opérateurs bloquants<a class="headerlink" href="#operateurs-bloquants" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Parfois il n’est pas possible d’éviter le calcul complet
+de l’une des opérations avant de continuer.
+On est alors en présence d’un opérateur  dit
+<em>bloquant</em> dont le résultat doit être entièrement produit (et matérialisé
+en cache ou écrit sur
+disque) avant de démarrer l’opération suivante. Par exemple:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>le tri (<code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">by</span></code>);</p></li>
+<li><p>la recherche d’un maximum ou d’un minimum (<code class="docutils literal notranslate"><span class="pre">max</span></code>, <code class="docutils literal notranslate"><span class="pre">min</span></code>);</p></li>
+<li><p>l’élimination des doublons (<code class="docutils literal notranslate"><span class="pre">distinct</span></code>);</p></li>
+<li><p>le calcul d’une moyenne ou d’une somme (<code class="docutils literal notranslate"><span class="pre">sum</span></code>, <code class="docutils literal notranslate"><span class="pre">avg</span></code>);</p></li>
+<li><p>un partitionnement (<code class="docutils literal notranslate"><span class="pre">group</span> <span class="pre">by</span></code>);</p></li>
+</ul>
+</div></blockquote>
+<p>sont autant d’opérations qui doivent lire complètement
+les données en entrée avant de produire un résultat (il
+est facile d’imaginer qu’on ne peut pas produire
+le résultat d’un tri tant qu’on n’a pas lu
+le dernier élément en entrée).</p>
+<div class="admonition-une-experience-a-tenter admonition">
+<p class="admonition-title">Une expérience à tenter</p>
+<p>Si vous êtes sur une base avec une table <code class="docutils literal notranslate"><span class="pre">T</span></code> de taille importante,
+tentez l’expérience suivante. Exécutez une première requête:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">T</span>
+</pre></div>
+</div>
+<p>et une seconde</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">T</span> <span class="k">order</span> <span class="k">by</span> <span class="o">*</span>
+</pre></div>
+</div>
+<p>Vous devriez constater une attente significative avant que
+le résultat de la seconde commence à s’afficher. Que se passe-t-il?
+Relisez ce qui précède.</p>
+</div>
+<p>Un opérateur bloquant introduit une <em>latence</em> dans l’exécution de la
+requête. En pratique, l’application est figée tant que la phase
+de préparation, exécutée à l’appel de la fonction <code class="docutils literal notranslate"><span class="pre">open()</span></code>, n’est pas terminée.
+À l’issue de la phase de latence, l’exécution peut reprendre et se dérouler
+alors très rapidement. L’inconvénient, pour une application, d’une
+exécution avec opérateur bloquant est qu’elle reste
+à ne rien faire pendant que le SGBD travaille, puis c’est l’inverse: le débit
+de données est important, mais c’est à l’application d’effectuer son travail.
+Le temps passé aux deux phases d’additionne, ce qui est un facteur  pénalisant
+pour la performance globale.</p>
+<p>Cela amène à distinguer deux critères de performance:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>le temps de réponse</em>: c’est le temps mis pour obtenir un premier nuplet;
+il est quasi-instantané pour une exécution sans opérateur bloquant;</p></li>
+<li><p><em>le temps d’exécution</em>: c’est le temps mis pour obtenir l’ensemble du résultat.</p></li>
+</ul>
+</div></blockquote>
+<p>On peut avoir une exécution avec un temps de réponse important et un temps
+d’exécution court, et l’inverse. En général, on choisira de privilégier
+le temps de réponse, pour pouvoir traiter les données reçues dès que possible.</p>
+</section>
+<section id="iterateurs">
+<h3>Itérateurs<a class="headerlink" href="#iterateurs" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le mécanisme de pipelinage « à la demande »
+est implanté au moyen de la notion générique <em>d’itérateur</em>,
+couramment rencontré par ailleurs dans les langages de programmation
+offrant des interfaces de traitement de collections.
+Chaque
+itérateur peut s’implanter comme un objet doté de trois
+fonctions:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">open()</span></code> commence le processus pour obtenir
+des nuplets résultats: elle alloue les resources nécessaires,
+initialise des structures de données et appelle <code class="docutils literal notranslate"><span class="pre">open()</span></code>  pour chacune
+de ses <em>sources</em> (c’est-à-dire pour chacun des itérateurs
+fournissant des données en entrée);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">next()</span></code> effectue une étape de l’itération, retourne le nuplet produit
+par cette étape, et met à jour les structures de données nécessaires pour
+obtenir les résultats suivants; la fonction
+peut appeler une ou plusieurs fois <code class="docutils literal notranslate"><span class="pre">next()</span></code>  sur ses sources.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">close()</span></code> termine l’itération et libère les
+ressources,  lorsque tous les articles du résultat ont été obtenus.
+Elle appelle typiquement
+<code class="docutils literal notranslate"><span class="pre">close()</span></code>  sur chacune de ses sources.</p></li>
+</ul>
+</div></blockquote>
+<p>Voici une première illustration  d’un itérateur, celui
+du balayage séquentiel d’une table que nous appellerons <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>. La fonction
+<code class="docutils literal notranslate"><span class="pre">open()</span></code> de cet itérateur  place un curseur au début du fichier à lire.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> openScan
+<span class="o">{</span>
+  <span class="c1"># Entrée: $T est la table</span>
+
+  <span class="c1"># Initialisations</span>
+  <span class="nv">$p</span> <span class="o">=</span> <span class="nv">$T</span>.first<span class="p">;</span>    <span class="c1"># Premier bloc de T</span>
+  <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$p</span>.init<span class="p">;</span>     <span class="c1"># On se place avant le premier nuplet</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>La fonction <code class="docutils literal notranslate"><span class="pre">next</span></code> renvoie l’enregistrement suivant, ou <code class="docutils literal notranslate"><span class="pre">null</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> nextScan
+<span class="o">{</span>
+   <span class="c1"># Avançons sur le nuplet suivant</span>
+   <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$p</span>.next<span class="p">;</span>
+   <span class="c1"># A-t-on atteint le dernier enregistrement du bloc ?</span>
+   <span class="k">if</span> <span class="o">(</span><span class="nv">$e</span> <span class="o">=</span> null<span class="o">)</span> <span class="k">do</span>
+      <span class="c1"># On passe au bloc suivant</span>
+      <span class="nv">$p</span> <span class="o">=</span> <span class="nv">$T</span>.next<span class="p">;</span>
+      <span class="c1"># Dernier bloc dépassé?</span>
+      <span class="k">if</span> <span class="o">(</span><span class="nv">$p</span> <span class="o">=</span> null<span class="o">)</span> <span class="k">then</span>
+          <span class="k">return</span> null<span class="p">;</span>
+      <span class="k">else</span>
+           <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$p</span>.first<span class="p">;</span>
+      <span class="k">fi</span>
+    <span class="k">done</span>
+
+    <span class="k">return</span> <span class="nv">$e</span><span class="p">;</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>La fonction close libère les ressources.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> closeScan
+<span class="o">{</span>
+  close<span class="o">(</span><span class="nv">$T</span><span class="o">)</span><span class="p">;</span>
+  <span class="k">return</span><span class="p">;</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">openScan</span></code> initialise la lecture en se plaçant <em>avant</em> le premier enregistrement
+du premièr bloc de
+<span class="math notranslate nohighlight">\(T\)</span>. Chaque appel à <em>nextScan</em> () retourne un enregistrement/nuplet. Si le bloc courant a été entièrement lu,
+il lit le bloc
+suivant et retourne le premier enregistrement de ce bloc.</p>
+<p>Avec ce premier itérateur, nous savons déjà exécuter au moins une requête SQL! C’est la
+plus  simple de toutes.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">T</span>
+</pre></div>
+</div>
+<p>Doté de notre itérateur <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>, cette requête s’exécute de la manière suivante:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Parcours séquentiel de la table T</span>
+<span class="nv">$curseur</span> <span class="o">=</span> new FullScan<span class="o">(</span>T<span class="o">)</span><span class="p">;</span>
+<span class="nv">$nuplet</span> <span class="o">=</span> <span class="nv">$curseur</span>.next<span class="o">()</span><span class="p">;</span>
+
+<span class="k">while</span> <span class="o">[</span><span class="nv">$nuplet</span> !<span class="o">=</span> null <span class="o">]</span>
+<span class="k">do</span>
+  <span class="c1"># Traitement du nuplet</span>
+  ...
+  <span class="c1"># Récupération du nuplet suivant</span>
+  <span class="nv">$nuplet</span> <span class="o">=</span> <span class="nv">$curseur</span>.next<span class="o">()</span><span class="p">;</span>
+<span class="k">done</span>
+
+<span class="c1"># Fermeture du curseur</span>
+<span class="nv">$curseur</span>.close<span class="o">()</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Ceux qui ont déjà pratiqué l’accès à une base de données par
+une interface de  programmation reconnaîtront sans peine
+la séquence classique d’ouverture d’un curseur, de parcours du résultat et de
+fermeture du curseur. C’est facile à comprendre pour une requête aussi simple
+que celle illustrée ci-dessus. La beauté du modèle d’exécution est que
+la même séquence s’applique pour des requêtes extrêmement complexes.</p>
+</section>
+<section id="quiz">
+<h3>Quiz<a class="headerlink" href="#quiz" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Une application reçoit 100 000 nuplets, résultat d’une requête SQL. Le traitement par l’application
+de chaque nuplet prend 0,5 sec. Le SGBD
+met de son côté 0,2 secondes pour préparer chaque nuplet.</p>
+<blockquote>
+<div><ul>
+<li><p>En mode matérialisation, le temps de réponse est de</p>
+<div class="reauthoring_embedded_quiz" id="eval2-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 0,2 secondes</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  20 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  200 000 secondes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>En mode matérialisation, l’application finit de s’exécuter après</p>
+<div class="reauthoring_embedded_quiz" id="eval2-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 70 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  50 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  20 000 secondes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>En mode pipelinage, le temps de réponse est de</p>
+<div class="reauthoring_embedded_quiz" id="eval2-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  0,2 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  20 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  200 000 secondes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>En mode pipelinage, l’application finit de s’exécuter après</p>
+<div class="reauthoring_embedded_quiz" id="eval2-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 70 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 50 000 secondes</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 20 000 secondes</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Parmi les requêtes suivantes, quelles sont celles qui nécessitent un opérateur bloquant.
+(Aide : se demander s’il faut lire ou non toute la table
+avant de produire le premier nuplet du résultat).</p>
+<div class="reauthoring_embedded_quiz" id="eval2-%"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">titre</span> <span class="pre">from</span> <span class="pre">Film</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">distinct</span> <span class="pre">titre</span> <span class="pre">from</span> <span class="pre">Film</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">count(titre)</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">group</span> <span class="pre">by</span> <span class="pre">année</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">titre</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">order</span> <span class="pre">by</span> <span class="pre">année</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">substring(titre,</span> <span class="pre">1,</span> <span class="pre">10)</span> <span class="pre">from</span> <span class="pre">Film</span></code></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s2-les-operateurs-de-base">
+<h2>S2: les opérateurs de base<a class="headerlink" href="#s2-les-operateurs-de-base" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sloperateurs.pdf">Diapositives: les opérateurs de base</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a42376acjqp1g/">Vidéo plans d’exécution (partie 1)</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a423cagaw4i9b/">Vidéo plans d’exécution (partie 2)</a></p></li>
+</ul>
+</div>
+<p>Cette section est consacrée aux principaux opérateurs
+utilisés dans l’évaluation d’une requête « simple », accédant à une seule
+table. En d’autres termes, il suffisent à évaluer toute requête de la forme:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">,</span> <span class="p">...,</span> <span class="n">an</span> <span class="k">from</span> <span class="n">T</span> <span class="k">where</span> <span class="n">condition</span>
+</pre></div>
+</div>
+<p>En premier lieu, il faut accéder à la table <em>T</em>. Il existe exactement
+deux méthodes possibles:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>Accès séquentiel</em>. Tous les nuplets de la table
+sont examinés, dans l’ordre du stockage.</p></li>
+<li><p><em>Accès par adresse</em>. Si on connaît l’adresse du
+nuplet, on peut aller lire
+directement le bloc et obtenir ainsi un accès optimal.</p></li>
+</ul>
+</div></blockquote>
+<p>Chaque méthode correspond à un opérateur. Le second (l’opérateur d’accès direct)
+est toujours associé à une source qui
+lui fournit l’adresse des enregistrements. Dans un SGBD relationnel où
+le modèle de données ne connaît pas la notion d’adresse physique, cette source
+est <em>toujours</em> un opérateur de parcours d’index. Nous allons donc également décrire
+ce dernier sous forme d’itérateur. Enfin, il est nécessaire d’effectuer une
+sélection (pour appliquer la condition de la clause <code class="docutils literal notranslate"><span class="pre">where</span></code>) et une projection.
+Ces deux derniers opérateurs sont triviaux.</p>
+<section id="parcours-sequentiel">
+<h3>Parcours séquentiel<a class="headerlink" href="#parcours-sequentiel" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Le parcours séquentiel d’une table est utile dans un grand nombre de
+cas. Tout d’abord on a souvent besoin de parcourir tous les
+enregistrements d’une relation, par exemple pour faire une
+projection. Certains algorithmes de jointure utilisent le balayage
+d’au moins une des deux tables. On peut enfin vouloir trouver un ou
+plusieurs enregistrements d’une table satisfaisant un critère de
+sélection.</p>
+<p>L’opérateur est implanté par un itérateur qui a déjà été discuté dans la
+section précédente. Son coût est relativement élevé: il faut accéder
+à tous les blocs de la table, et le temps de parcours
+est donc proportionnel à la taille de cette dernière.</p>
+<p>Cette mesure « brute » doit cependant être pondérée par le fait
+qu’une table est le plus souvent stockée de manière contiguë sur le
+disque, et se trouve de plus partiellement en mémoire RAM si elle
+a été utilisée récemment. Comme nous l’avons vu dans
+le chapitre <a class="reference internal" href="stock.html#chap-stock"><span class="std std-ref">Dispositifs de stockage</span></a>, le parcours d’un segment contigu
+évite les déplacements des têtes de lecture et la performance est
+alors essentiellement limitée par le débit du disque.</p>
+</section>
+<section id="parcours-d-index">
+<h3>Parcours d’index<a class="headerlink" href="#parcours-d-index" title="Lien permanent vers ce titre">¶</a></h3>
+<p>On considère dans ce qui suit
+que la structure de l’index est celle de l’arbre B, ce qui est
+presque toujours le cas en pratique.</p>
+<p>L’algorithme de parcours d’index  a été étudié dans le chapitre <a class="reference internal" href="arbreb.html#chap-arbreb"><span class="std std-ref">Structures d’index: l’arbre B</span></a>.
+Rappelons brièvement qu’il se décompose en deux phases. La première est
+une <em>traversée</em> de l’index en partant de la racine jusqu’à la feuille contenant
+l’entrée associée à la clé de recherche. La seconde est un parcours séquentiel des feuilles
+pour trouver toutes les adresses correspondant à la clé (il peut y en avoir plusieurs dans le cas
+général) ou à l’intervalle de clés.</p>
+<p>Ces deux phases s’implantent respectivement par les fonctions <em>open()</em> et <em>next()</em> de l’itérateur
+<code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>. Voici tout d’abord la fonction <em>open()</em>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> openIndexScan
+<span class="o">{</span>
+  <span class="c1"># $c est la valeur de la clé recherchée; $I est l&#39;index</span>
+
+  <span class="c1"># On parcours les niveaux de l&#39;index en partant de la racine</span>
+  <span class="nv">$bloc</span> <span class="o">=</span> <span class="nv">$I</span>.racine<span class="o">()</span><span class="p">;</span>
+  <span class="k">while</span> <span class="o">[</span><span class="nv">$bloc</span>.estUneFeuille<span class="o">()</span> <span class="o">=</span> false<span class="o">]</span>
+  <span class="k">do</span>
+    <span class="c1"># On recherche l&#39;entrée correspondant à $c</span>
+    <span class="k">for</span> <span class="nv">$e</span> <span class="k">in</span> <span class="o">(</span><span class="nv">$bloc</span>.entrées<span class="o">)</span>
+    <span class="k">do</span>
+      <span class="k">if</span> <span class="o">(</span><span class="nv">$e</span>.clé &gt; <span class="nv">$c</span><span class="o">)</span>
+        break<span class="p">;</span>
+     <span class="k">done</span>
+
+    <span class="nv">$bloc</span> <span class="o">=</span> <span class="nv">$GA</span>.lecture <span class="o">(</span><span class="nv">$e</span>.adresse<span class="o">)</span><span class="p">;</span>
+  <span class="k">done</span>
+
+  <span class="c1"># $bloc est la feuille recherchée; on se positionne sur la</span>
+  <span class="c1"># première occurrence de $a</span>
+  <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$bloc</span>.premièreOccurrence <span class="o">(</span><span class="nv">$c</span><span class="o">)</span>
+  <span class="c1"># Fin de la première phase</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>La fonction <em>next()</em> est identique à celle du parcours séquentiel d’un fichier, la seule différence
+est qu’elle renvoie des adresses d’enregistrement et pas des nuplets.
+La version ci-dessous, simplifiée,
+ne montre pas le passage d’une feuille à une autre.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> nextIndexScan
+<span class="o">{</span>
+   <span class="c1"># Seconde phase: on est positionné sur une feuille de l&#39;arbre, on</span>
+   <span class="c1">#- avance sur les entrées correspondant à la clé $c</span>
+   <span class="k">if</span> <span class="o">(</span><span class="nv">$e</span>.clé <span class="o">=</span> <span class="nv">$c</span><span class="o">)</span> <span class="k">then</span>
+     <span class="nv">$adresse</span> <span class="o">=</span> <span class="nv">$e</span>.adresse<span class="p">;</span>
+     <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$e</span>.next<span class="o">()</span><span class="p">;</span>
+     <span class="k">return</span> <span class="nv">$adresse</span><span class="p">;</span>
+   <span class="k">else</span>
+     <span class="k">return</span> null<span class="p">;</span>
+   <span class="k">fi</span>
+ <span class="o">}</span>
+</pre></div>
+</div>
+</section>
+<section id="acces-par-adresse">
+<h3>Accès par adresse<a class="headerlink" href="#acces-par-adresse" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Quand on connait l’adresse d’un enregistrement, donc l’adresse du bloc où
+il est stocké, y accéder coûte une lecture unique de bloc. Cette adresse
+(rappelons
+que l’adresse d’un enregistrement se décompose en une adresse de bloc
+et une adresse d’enregistrement locale au bloc)
+doit nécessairement être fournie par un autre itérateur, que nous
+appellerons la <em>source</em> dans ce qui suit (et qui, en pratique, est
+toujours un parcours d’index).</p>
+<p>L’itérateur
+d’accès direct (<code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>) s’implante alors très facilement. Voici la
+fonction <em>next()</em>  .</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> nextDirectAccess
+<span class="o">{</span>
+  <span class="c1"># $source est l&#39;opérateur source;  $GA est le gestionnaire d&#39;accès</span>
+
+  <span class="c1"># Récupérons l&#39;adresse de l&#39;enregistrement à lire</span>
+  <span class="nv">$a</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span>
+
+  <span class="c1"># Plus d&#39;adresse? On renvoie null</span>
+  <span class="k">if</span> <span class="o">(</span><span class="nv">$a</span> <span class="o">=</span> null<span class="o">)</span> <span class="k">then</span>
+    <span class="k">return</span> null<span class="p">;</span>
+  <span class="k">else</span>
+    <span class="c1"># On effectue par une lecture (logique) du bloc</span>
+    <span class="nv">$b</span> <span class="o">=</span> <span class="nv">$GA</span>.lecture <span class="o">(</span><span class="nv">$a</span>.adressBloc<span class="o">)</span><span class="p">;</span>
+    <span class="c1"># On récupère l&#39;enregistrement dans le bloc</span>
+    <span class="nv">$e</span> <span class="o">=</span> <span class="nv">$b</span>.get <span class="o">(</span><span class="nv">$a</span>.adresseLocale<span class="o">)</span>
+    <span class="k">return</span> <span class="nv">$e</span><span class="p">;</span>
+  <span class="k">fi</span>
+ <span class="o">}</span>
+</pre></div>
+</div>
+<p>Cet opérateur est très efficace pour récupérer <em>un</em> enregistrement par son adresse,
+notamment dans le cas fréquent où le bloc est déjà dans le cache. Quand on l’exécute
+de manière intensive sur une table, il engendre de nombreux accès aléatoires
+et on peut se poser la question de préférer un parcours séquentiel. La décision
+relève du processus d’optimisation: nous y revenons plus loin.</p>
+</section>
+<section id="operateurs-de-selection-et-de-projection">
+<h3>Opérateurs de sélection et de projection<a class="headerlink" href="#operateurs-de-selection-et-de-projection" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’opérateur de sélection (le plus souvent appelé <em>filtre</em>) applique une condition
+aux enregistrements obtenus d’un autre itérateur. Voici la fonction <em>next()</em>
+de l’itérateur.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> nextFilter
+<span class="o">{</span>
+  <span class="c1"># $source est l&#39;opérateur fournissant les nuplets; $C est la condition de sélection</span>
+
+  <span class="c1"># On récupère un nuplet de la source</span>
+  <span class="nv">$nuplet</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span>
+  <span class="c1"># Et on continue tant que la sélection n&#39;est pas satisfaite, ou la source épuisée</span>
+  <span class="k">while</span> <span class="o">(</span><span class="nv">$nuplet</span> !<span class="o">=</span> null  and <span class="nv">$nuplet</span>.test<span class="o">(</span><span class="nv">$C</span><span class="o">)</span> <span class="o">=</span> <span class="nb">false</span><span class="o">)</span>
+  <span class="k">do</span>
+    <span class="nv">$nuplet</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span>
+  <span class="k">done</span>
+
+  <span class="k">return</span> <span class="nv">$nuplet</span><span class="p">;</span>
+ <span class="o">}</span>
+</pre></div>
+</div>
+<p>En pratique, la source est <em>toujours</em> soit un itérateur de parcours séquentiel, soit
+un itérateur d’accès direct. Le filtre a pour effet de réduire la taille des données
+à traiter, et il est donc bénéfique de l’appliquer le plus tôt possible, immédiatement
+après l’accès à chaque enregistrement.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Cette règle est une des heuristiques les plus courantes de la phase
+dite d’optimisation que nous présenterons plus tard. Elle est souvent
+décrite par l’expression « pousser les sélections vers la base de l’arbre d’exécution ».</p>
+</div>
+<p>Dans certains systèmes (p.e., Oracle), cet opérateur est d’ailleurs intégré aux opérateurs d’accès
+à une table (séquentiel ou direct) et n’apparaît donc pas explicitement
+dans le plan d’exécution.</p>
+<p>L’opérateur de projection, consistant à ne conserver que certains attributs des nuplets en entrée, est
+trivial. La fonction <em>next()</em> prend un nuplet en entrée, en extrait les attributs à conserver
+et renvoie un nuplet formé de ces derniers.</p>
+</section>
+<section id="execution-de-requetes-mono-tables">
+<h3>Exécution de requêtes mono-tables<a class="headerlink" href="#execution-de-requetes-mono-tables" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Reprenons notre requête mono-table générique, de la forme:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">,</span> <span class="p">...,</span> <span class="n">an</span> <span class="k">from</span> <span class="n">T</span> <span class="k">where</span> <span class="n">condition</span>
+</pre></div>
+</div>
+<p>Notre petit catalogue d’opérateurs nous permet de l’exécuter. Il nous donne
+même plusieurs options selon que l’on utilise ou pas un index. Voici
+un exemple concret que nous allons examiner en détails.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span> <span class="k">from</span> <span class="n">Film</span> <span class="k">where</span> <span class="n">genre</span><span class="o">=</span><span class="s1">&#39;SF&#39;</span> <span class="k">and</span> <span class="n">annee</span> <span class="o">=</span> <span class="mi">2014</span>
+</pre></div>
+</div>
+<p>Et nous allons supposer que la table des films est indexée sur l’année. Avec
+notre boîte à outils, il existe (au moins) deux programmes, ou <em>plans d’exécution</em>, illustrés
+par la  <a class="reference internal" href="#planex-monotable"><span class="std std-numref">Fig. 6.3</span></a>.</p>
+<figure class="align-center" id="id6">
+<span id="planex-monotable"></span><a class="reference internal image-reference" href="_images/planEx-monotable.png"><img alt="_images/planEx-monotable.png" src="_images/planEx-monotable.png" style="width: 90%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.3 </span><span class="caption-text">Deux plans d’exécution pour une requête monotable</span><a class="headerlink" href="#id6" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le premier plan utilise l’index pour obtenir les adresses des films
+parus en 2014 grâce à un opérateur <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>.  Il est associé à
+un opérateur <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code> qui récupère, une par une, les adresses
+et obtient, par une lecture directe, le nuplet correspondant. Enfin,
+chaque nuplet passe par l’opérateur de filtre qui ne conserve que ceux
+dont le genre est “SF”.</p>
+<p>On voit sur ce premier exemple qu’un plan d’exécution est un programme
+d’une forme très particulière. Il est constitué d’un graphe d’opérateurs
+connectés par des “tuyaux” où circulent des nuplets. L’application, qui
+communique avec la racine du graphe par l’interface de programmation,
+joue le rôle d’un « aspirateur » qui tire vers le haut ce flux de données
+fournissant le résultat de la requête.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Pour une requête monotable, le graphe est linéaire. Quand la requête comprend
+des jointures, il prend la forme d’un arbre (binaire).</p>
+</div>
+<p>Examinons maintenant le second plan. Il consiste simplement à parcourir
+séquentiellement la table (avec un opérateur <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>), suivi d’un
+filtre qui  applique les deux critères de sélection.</p>
+<p>Quel est le meilleur de ces deux plans? En principe, l’utilisation
+de l’index donne de bien meilleurs résultats. Et en général,
+le choix d’utiliser le parcours séquentiel ou l’accès par index
+peut sembler trivial: on regarde si un index est disponible,
+et si oui on l’utilise comme chemin d’accès. Dans ce cas le plan
+d’exécution est caractérisé par l’association de l’opérateur <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>
+qui récupère des adresses, et de l’opérateur <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code> qui récupère les nuplets
+en fonction des adresses.</p>
+<p>En fait, ce choix est légèrement compliqué par les considérations suivantes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Quelle est la taille de la table? Si elle tient en quelques blocs,
+un accès par l’index est probablement inutilement compliqué.</p></li>
+<li><p>Le critère de recherche porte-t-il sur un ou sur plusieurs
+attributs? S’il y a plusieurs attributs, les critères
+sont-ils combinés par des <strong>and</strong> ou des <strong>or</strong>?</p></li>
+<li><p>Quelle est la sélectivité de la recherche? On constate
+que quand une partie significative de la table
+est sélectionnée, il devient inutile, voire contre-performant,
+d’utiliser un index.</p></li>
+</ul>
+</div></blockquote>
+<p>Le cas réellement trivial est celui – fréquent – d’une recherche avec un
+critère d’égalité sur la clé primaire
+(ou plus généralement sur un attribut indexé par un index unique).
+Dans ce cas l’utilisation
+de l’index ne se discute pas. Exemple:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span>   <span class="n">Film</span> <span class="k">where</span> <span class="n">idFilm</span> <span class="o">=</span> <span class="mi">100</span>
+</pre></div>
+</div>
+<p>Dans beaucoup d’autres situations
+les choses sont un peu plus subtiles. Le cas
+le plus délicat est celui d’une recherche par intervalle sur un champ
+indexé.</p>
+<p>Voici un exemple simple de requête
+dont l’optimisation n’est pas évidente à priori.
+Il s’agit d’une recherche par intervalle (comme toute sélection
+avec <span class="math notranslate nohighlight">\(&gt;\)</span> , ou une recherche par préfixe).</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span>
+<span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">idFilm</span> <span class="k">between</span> <span class="mi">100</span> <span class="k">and</span> <span class="mi">1000</span>
+</pre></div>
+</div>
+<p>L’utilisation d’un index n’est pas toujours
+appropriée dans ce cas, comme le montre le petit exemple
+de la  <a class="reference internal" href="#interbtree"><span class="std std-numref">Fig. 6.4</span></a>. Dans cet exemple, le fichier
+a quatre blocs, et les enregistrements sont identifiés
+(clé unique) par un numéro. On peut noter que
+le fichier n’est pas ordonné sur la clé (il n’y a aucune raison
+à priori pour que ce soit le cas).</p>
+<figure class="align-center" id="id7">
+<span id="interbtree"></span><a class="reference internal image-reference" href="_images/interBtree.png"><img alt="_images/interBtree.png" src="_images/interBtree.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.4 </span><span class="caption-text">Recherche par intervalle avec index</span><a class="headerlink" href="#id7" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’index en revanche s’appuie sur l’ordre des clés (il s’agit
+ici typiquement d’un arbre B, voir chapitre <a class="reference internal" href="arbreb.html#chap-arbreb"><span class="std std-ref">Structures d’index: l’arbre B</span></a>).
+À chaque valeur de clé dans l’index est associé un
+pointeur (une adresse) qui désigne l’enregistrement dans le
+fichier.</p>
+<p>Maintenant supposons:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>que l’on effectue une recherche par intervalle
+pour ramener tous les enregistrements entre 9 et 13;</p></li>
+<li><p>que la mémoire centrale disponible soit de trois blocs.</p></li>
+</ul>
+</div></blockquote>
+<p>Si on choisit d’utiliser l’index, comme semble y inviter le fait
+que le critère de recherche porte sur la clé primaire, on
+va procéder en deux étapes.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Étape 1</strong>: on récupère dans l’index
+toutes les valeurs de clé comprises entre 9 et 13 (opérateur <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>).</p></li>
+<li><p><strong>Étape 2</strong>: pour chaque valeur obtenue dans l’étape 1,
+on prend le pointeur associé, on lit le bloc dans le fichier
+et on en extrait l’enregistrement (opérateur <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>).</p></li>
+</ul>
+</div></blockquote>
+<p>Donc on va lire le bloc 1 pour l’enregistrement 9, puis le bloc 2 pour
+l’enregistrement 10, puis le bloc 3 pour l’enregistrement 11. À ce moment-là
+la mémoire (trois blocs) est pleine. Quand on lit le bloc 4 pour y prendre
+l’enregistrement 12, on va supprimer du cache le bloc le plus
+anciennement utilisé, à savoir le bloc 1. Pour finir,
+on doit relire, <em>sur le disque</em>, le bloc 1 pour l’enregistrement 13.
+Au total on a effectué 5 lectures, alors qu’un simple balayage du fichier
+se serait contenté de 4, et aurait de plus bénéficié d’une lecture séquentielle.</p>
+<p>Cette petite démonstration est basée sur une situation  caricaturale
+et s’appuie sur des ordres de grandeurs
+qui ne sont clairement pas représentatifs d’une vraie base de données.
+Elle montre simplement que les accès au fichier, à partir
+d’un index de type arbre B, sont aléatoires et peuvent conduire
+à lire plusieurs fois le même bloc. Même sans cela, des recherches
+par adresses  mènent à déclencher des opérations d’accès à
+un bloc pour lire un unique enregistrement à chaque fois, ce qui
+s’avère  pénalisant à terme par rapport à un simple parcours.</p>
+<p>La leçon, c’est que le SGBD ne peut pas aveuglément appliquer une stratégie
+pré-déterminée pour exécuter une requête. Il doit examiner, parmi les
+solutions possibles (au du moins celles qui semblent plausibles) celles
+qui vont donner le meilleur résutat. C’est un module particulier (et très sensible),
+<em>l’optimiseur</em>, qui se charge de cette estimation.</p>
+<p>Voici quelques autres exemples, plus faciles
+à traiter.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">idFilm</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="k">and</span>    <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span>
+</pre></div>
+</div>
+<p>Ici on utilise évidemment l’index pour accéder à l’unique
+film (s’il existe) ayant l’identifiant 20.
+Puis, une fois l’enregistrement en mémoire, on vérifie
+que son titre est bien <em>Vertigo</em>. C’est un plan similaire
+à celui de la  <a class="reference internal" href="#planex-monotable"><span class="std std-numref">Fig. 6.3</span></a> (gauche) qui sera utilisé.</p>
+<p>Voici le cas
+complémentaire:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span>   <span class="n">Film</span>
+<span class="k">where</span>  <span class="n">idFilm</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="k">or</span>     <span class="n">titre</span> <span class="o">=</span> <span class="s1">&#39;Vertigo&#39;</span>
+</pre></div>
+</div>
+<p>On peut utiliser l’index pour trouver le film 20,
+mais il faudra de toutes manières faire un parcours séquentiel
+pour rechercher <em>Vertigo</em> s’il n’y a pas d’index sur le titre.
+Autant donc s’épargner la recherche par index et trouver les deux films au cours du balayage.
+Le plan sera donc plutôt celui de la  <a class="reference internal" href="#planex-monotable"><span class="std std-numref">Fig. 6.3</span></a>, à droite.</p>
+</section>
+<section id="id1">
+<h3>Quiz<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>L’opérateur de parcours d’index (<code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>) fournit, à chaque appel <code class="docutils literal notranslate"><span class="pre">next()</span></code></p>
+<div class="reauthoring_embedded_quiz" id="eval3-1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Un nuplet</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  L’ensemble des nuplets du résultat</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  L’adresse d’un nuplet</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’ensemble des adresses des nuplets du résultat</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>On suppose qu’il existe un index sur l’année, quelles sont parmi les requêtes suivantes celles dont le plan
+d’exécution combine <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>  et <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code> :</p>
+<div class="reauthoring_embedded_quiz" id="eval3-2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">film</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">*</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">année</span> <span class="pre">between</span> <span class="pre">2001</span> <span class="pre">and</span> <span class="pre">2010</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">année</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">titre</span> <span class="pre">like</span> <span class="pre">‘A%’</span></code></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Parmi les requêtes suivantes, quelles sont celles qui peuvent s’évaluer avec un plan d’exécution comprenant seulement un
+<code class="docutils literal notranslate"><span class="pre">IndexScan</span></code> :</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="eval3-3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">titre</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">année</span> <span class="pre">between</span> <span class="pre">2001</span> <span class="pre">and</span> <span class="pre">2010</span></code></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span> <span class="pre">count(*)</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">année</span> <span class="pre">between</span> <span class="pre">2001</span> <span class="pre">and</span> <span class="pre">2010</span></code></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  <code class="docutils literal notranslate"><span class="pre">select</span>&#160; <span class="pre">count(titre)</span> <span class="pre">from</span> <span class="pre">Film</span> <span class="pre">where</span> <span class="pre">année</span> <span class="pre">between</span> <span class="pre">2001</span> <span class="pre">and</span> <span class="pre">2010</span></code></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<ul class="simple">
+<li><p>Dans le second plan d’exécution, celui basé sur un index, peut-on inverser les opérateurs d’accès direct et de filtre ?</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="eval3-4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<ul class="simple">
+<li><p>Reprenez l’exemple du cours d’un accès avec un index pour un intervalle [9,13]. Supposons maintenant que le
+fichier est trié sur la clé. Combien faudra-t-il lire de blocs dans le pire des cas, en supposant qu’un
+bloc contient 10 nuplets ?</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="eval3-5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 1</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 2</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Tous</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<ul class="simple">
+<li><p>Si le fichier est trié sur la clé de l’index, est-il toujours préférable de passer par l’index pour
+une recherche par intervalle ?</p></li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="eval3-6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img>  Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</div></blockquote>
+</section>
+</section>
+<section id="s3-le-tri-externe">
+<h2>S3: Le tri externe<a class="headerlink" href="#s3-le-tri-externe" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/sltrifusion.pdf">Diapositives: le tri-fusion</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a42431bmd2zas/">Algorithme de tri</a></p></li>
+</ul>
+</div>
+<p><em>Le tri</em> est une autre opération
+fondamentale pour l’évaluation des requêtes. On a besoin du
+tri par exemple lorsqu’on fait une projection ou une union et qu’on
+désire éliminer les enregistrements en double (clauses <code class="docutils literal notranslate"><span class="pre">distinct</span></code>,
+<code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">by</span></code> de SQL).
+On verra également qu’un
+algorithme de jointure courant consiste à trier au préalable
+sur l’attribut de jointure  les relations à joindre.</p>
+<p>Le tri d’une relation sur un ou plusieurs attributs utilise
+l’algorithme de tri-fusion (<em>sort-merge</em>) en mémoire externe. Il est du type
+« diviser pour régner », avec deux phases. Dans la première phase
+on décompose le problème récursivement en sous-problèmes, et ce  jusqu’à ce que
+chaque sous-problème puisse être résolu simplement et efficacement. La deuxième phase
+consiste à agréger récursivement les solutions.</p>
+<p>Dans le cas l’algorithme de tri-fusion, les deux phases se résument ainsi:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Partitionnement de la table en <em>fragments</em> tels que chaque fragment
+tienne en mémoire centrale. On
+trie alors chaque fragment (en mémoire),  en général avec l’algorithme de <em>Quicksort</em>.</p></li>
+<li><p>Fusion des fragments triés.</p></li>
+</ul>
+</div></blockquote>
+<p>Regardons en détail chacune des phases.</p>
+<section id="phase-de-tri">
+<h3>Phase de tri<a class="headerlink" href="#phase-de-tri" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Supposons que nous disposons pour faire le tri de <span class="math notranslate nohighlight">\(M\)</span>  blocs en
+mémoire. La phase de tri commence par prendre un fragment constitué
+des <span class="math notranslate nohighlight">\(M\)</span>  premiers blocs du fichier
+et les charge en mémoire. On  trie ces blocs avec <em>Quicksort</em>
+et on écrit le fragment trié sur le disque dans une zone temporaire
+(<a class="reference internal" href="#phasetri"><span class="std std-numref">Fig. 6.5</span></a>). On recommence
+avec les <span class="math notranslate nohighlight">\(M\)</span>  blocs suivants du fichier, jusqu’à
+ce que tout le fichier ait été lu par fragments de <span class="math notranslate nohighlight">\(M\)</span> blocs,</p>
+<figure class="align-center" id="id8">
+<span id="phasetri"></span><a class="reference internal image-reference" href="_images/phasetri.png"><img alt="_images/phasetri.png" src="_images/phasetri.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.5 </span><span class="caption-text">Algorithme de tri-fusion: phase de tri</span><a class="headerlink" href="#id8" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>À l’issue de cette phase on a <span class="math notranslate nohighlight">\(\lceil B / M \rceil\)</span> fragments triès,
+où <span class="math notranslate nohighlight">\(B\)</span> est le nombre de blocs
+du fichier.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Si le fichier occupe 100 000 blocs, et la mémoire disponible
+pour le tri est de 1 000 blocs, cette phase découpe le fichier en 100 fragments de
+1 000 blocs chacun. Ces 100 fragments sont lus un par un, triés, et écrits dans
+la zone temporaire.</p>
+</div>
+</section>
+<section id="phase-de-fusion">
+<h3>Phase de fusion<a class="headerlink" href="#phase-de-fusion" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La phase de fusion consiste à  fusionner  les
+fragments.  Si on fusionne <em>n</em> fragments de taille
+<em>M</em>, on obtient en effet un nouveau fragment trié de taille <span class="math notranslate nohighlight">\(n \times M\)</span>.
+En général, une étape de fusion suffit pour obtenir l’ensemble du fichier trié,
+mais si ce dernier est très gros -
+ou si la mémoire disponible est insuffisante - il est parfois nécessaire
+d’effectuer plusieurs étapes de fusion.</p>
+<p>Commençons par regarder comment on fusionne en mémoire centrale
+deux listes <em>triées</em> <span class="math notranslate nohighlight">\(A\)</span> et <span class="math notranslate nohighlight">\(B\)</span>. On a besoin de trois zones en <em>cache</em>. Dans les
+deux premières, les deux listes à trier sont stockées. La troisième
+zone de cache sert pour le résultat, c’est-à-dire la liste résultante triée.</p>
+<p>L’algorithme employé (dit <em>fusion</em> ou « <em>merge</em> »)
+est une technique très efficace qui consiste à parcourir en parallèle et
+séquentiellement les listes, en une seule fois. Le parcours unique est permis par
+le tri des listes sur un même critère.</p>
+<p>La <a class="reference internal" href="#fusion"><span class="std std-numref">Fig. 6.6</span></a> montre comment on fusionne <span class="math notranslate nohighlight">\(A\)</span> et <span class="math notranslate nohighlight">\(B\)</span>. On maintient deux curseurs,
+positionnés au départ au début de chaque liste.
+L’algorithme compare les valeurs contenues dans les cellules pointées
+par les deux curseurs. On compare ces deux valeurs, puis:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>(choix 1) si elles sont égales, on déplace les deux valeurs dans la zone
+de résultat; <em>on avance les deux curseurs d’un cran</em></p></li>
+<li><p>(choix 2) sinon, on prend le curseur pointant sur la cellule dont la valeur est la
+plus petite, on déplace cette dernière dans la zone de résultat
+et on avance ce même curseur d’un cran.</p></li>
+</ul>
+</div></blockquote>
+<figure class="align-center" id="id9">
+<span id="fusion"></span><a class="reference internal image-reference" href="_images/fusion.png"><img alt="_images/fusion.png" src="_images/fusion.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.6 </span><span class="caption-text">Parcours linéaire pour la fusion de listes triées</span><a class="headerlink" href="#id9" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La  <a class="reference internal" href="#fusion"><span class="std std-numref">Fig. 6.6</span></a> se lit de gauche à droite, de haut en bas.
+On applique tout d’abord deux fois le choix 2, avançant sur
+la liste A puis la liste B. On avance encore sur la liste B puis la liste A.
+On se trouve alors face à la situation 2, et on copie les deux valeurs 4
+dans la zone de résultat.</p>
+<p>Et ainsi de suite.  Il est clair qu”<em>un seul parcours suffit</em>. Il devrait être clair également,
+par construction que la zone de résultat contient une liste <em>triée</em> contenant toutes
+les valeurs venant soit de A soit de B.
+.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>// Fusion de deux listes l1 et l2
+<span class="k">function</span> fusion
+<span class="o">{</span>
+  <span class="c1"># $l1 désigne la première liste</span>
+  <span class="c1"># $l2 désigne la seconde liste</span>
+  <span class="nv">$resultat</span> <span class="o">=</span> <span class="o">[]</span><span class="p">;</span>
+  <span class="c1"># Début de la fusion des listes</span>
+  <span class="k">while</span> <span class="o">(</span><span class="nv">$l1</span> !<span class="o">=</span> null and <span class="nv">$l2</span> !<span class="o">=</span> null<span class="o">)</span> <span class="k">do</span>
+    <span class="k">if</span> <span class="o">(</span><span class="nv">$l1</span>.val <span class="o">==</span> <span class="nv">$l2</span>.val<span class="o">)</span> <span class="k">then</span>
+      <span class="c1"># On a trouvé un doublon</span>
+      <span class="nv">$resultat</span> +<span class="o">=</span> <span class="nv">$l1</span>.val<span class="p">;</span>
+          <span class="nv">$resultat</span> +<span class="o">=</span> <span class="nv">$l2</span>.val<span class="p">;</span>
+      <span class="c1"># Avançons sur les deux listes</span>
+      <span class="nv">$l1</span> <span class="o">=</span> <span class="nv">$l1</span>.next<span class="p">;</span> <span class="nv">$l2</span> <span class="o">=</span> <span class="nv">$l2</span>.next<span class="p">;</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="o">(</span><span class="nv">$l1</span>.val &lt; <span class="nv">$l2</span>.val<span class="o">)</span> <span class="k">then</span>
+      <span class="c1"># Avançons sur l1</span>
+          <span class="nv">$resultat</span> +<span class="o">=</span> <span class="nv">$l1</span>.val<span class="p">;</span>
+      <span class="nv">$l1</span> <span class="o">=</span> <span class="nv">$l1</span>.next<span class="p">;</span>
+    <span class="k">else</span>
+       <span class="c1"># Avançons sur l2</span>
+          <span class="nv">$resultat</span> +<span class="o">=</span> <span class="nv">$l2</span>.val<span class="p">;</span>
+      <span class="nv">$l2</span> <span class="o">=</span> <span class="nv">$l2</span>.next<span class="p">;</span>
+    <span class="k">fi</span>
+  <span class="k">done</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>Remarquons que:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>L’algorithme <em>fusion</em> se généralise (assez facilement) à plusieurs listes.</p></li>
+<li><p>Si on fusionne <span class="math notranslate nohighlight">\(n\)</span> listes de taille <span class="math notranslate nohighlight">\(M\)</span>, la liste
+résultante a une taille de <span class="math notranslate nohighlight">\(n \times M\)</span>.</p></li>
+</ul>
+</div></blockquote>
+<p>La première étape de la phase de fusion de la relation consiste à fusionner les
+<span class="math notranslate nohighlight">\(\lceil B / M \rceil\)</span> obtenus à l’issue de la phase de tri.
+On prend pour cela <span class="math notranslate nohighlight">\(M-1\)</span> fragments à la fois, et on leur associe à chacun un
+bloc en mémoire, le
+bloc restant étant consacré au résultat.  On commence par lire le premier
+bloc des <span class="math notranslate nohighlight">\(M-1\)</span>  premiers fragments dans les <span class="math notranslate nohighlight">\(M-1\)</span> premiers blocs,
+et on applique
+l’algorithme de fusion sur les listes triées, comme expliqué ci-dessus.
+Les enregistrements triés sont stockés dans un nouveau fragment sur disque.</p>
+<p>On continue avec les <span class="math notranslate nohighlight">\(M-1\)</span>   blocs suivants de chaque fragment, jusqu’à
+ce que les <span class="math notranslate nohighlight">\(M-1\)</span>   fragments initiaux aient été entièrement lues et
+triés. On a alors
+sur disque une nouvelle partition de taille <span class="math notranslate nohighlight">\(M \times (M-1)\)</span>. On
+répète le processus avec les <span class="math notranslate nohighlight">\(M-1\)</span>  fragments suivants, et ainsi de suite.</p>
+<p>À la fin de cette première étape,  on obtient <span class="math notranslate nohighlight">\(\lceil \frac{B}{M \times (M-1)}\rceil\)</span>
+fragments triés, chacune (sauf le dernier qui est plus petit)
+ayant pour taille <span class="math notranslate nohighlight">\(M \times (M-1)\)</span>  blocs.
+La  <a class="reference internal" href="#trifusion"><span class="std std-numref">Fig. 6.7</span></a> résume la phase de fusion sous la forme
+d’un arbre, chaque nœud (agrandi à
+droite) correspondant à une fusion de <span class="math notranslate nohighlight">\(M-1\)</span>  partitions.</p>
+<figure class="align-center" id="id10">
+<span id="trifusion"></span><a class="reference internal image-reference" href="_images/trifusion.png"><img alt="_images/trifusion.png" src="_images/trifusion.png" style="width: 90%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.7 </span><span class="caption-text">Algorithme de tri-fusion: la phase de fusion</span><a class="headerlink" href="#id10" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Un exemple est donné dans la   <a class="reference internal" href="#trifusion"><span class="std std-numref">Fig. 6.7</span></a>
+sur un ensemble de films qu’on trie sur le nom du film.  Il
+y a trois phases de fusion, à partir de 6 fragments initiaux
+que l’on regroupe 2 à 2.</p>
+<figure class="align-center" id="id11">
+<span id="tri-fusion"></span><a class="reference internal image-reference" href="_images/tri-fusion.png"><img alt="_images/tri-fusion.png" src="_images/tri-fusion.png" style="width: 70%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.8 </span><span class="caption-text">Algorithme de tri-fusion: un exemple</span><a class="headerlink" href="#id11" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="cout-du-tri-fusion">
+<h3>Coût du tri-fusion<a class="headerlink" href="#cout-du-tri-fusion" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La phase de tri coûte <span class="math notranslate nohighlight">\(B\)</span>  écritures pour créer les
+partitions triées. À chaque étape de la phase de fusion, chaque fragment
+est lu une fois et les nouveaux fragments  créés sont <span class="math notranslate nohighlight">\(M-1\)</span>  fois
+plus grands mais <span class="math notranslate nohighlight">\(M-1\)</span>  fois moins nombreux. Par conséquent à chaque
+étape (pour chaque niveau de l’arbre de fusion), il y a <span class="math notranslate nohighlight">\(2\times B\)</span>
+entrées/sorties. Le nombre d’étapes, c’est-à-dire le nombre de niveaux
+dans l’arbre est <span class="math notranslate nohighlight">\(O(\log_{M-1} B)\)</span>. Le coût de la phase de
+fusion est <span class="math notranslate nohighlight">\(O(B \times \log_{M-1} B)\)</span>. Il prédomine celui de la phase de tri.</p>
+<p>En pratique, un niveau de fusion est en général suffisant.
+Idéalement, le fichier à trier tient complètement en mémoire
+et la phase de tri suffit pour obtenir un seul fragment
+trié, sans avoir à effectuer de fusion par la suite.
+Si possible, on peut donc chercher à allouer un nombre
+de bloc suffisant à l’espace de tri pour que tout
+le fichier puisse être traité en une seule passe.</p>
+<p>Il faut bien réaliser que les performances ne s’améliorent
+pas de manière continue avec l’allocation de mémoire supplémentaire.
+En fait il existe des « seuils » qui vont entraîner
+un étape de fusion en plus ou en moins, avec des
+différences de performance notables, comme le montre
+l’exemple suivant.</p>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>Prenons l’exemple du tri d’un fichier de 75 000 blocs
+de 4 096 octets, soit 307 Mo. Voici quelques calculs,
+pour des tailles mémoires différentes.</p>
+<blockquote>
+<div><ul>
+<li><p>Avec une mémoire <span class="math notranslate nohighlight">\(M &gt; 307 \text{Mo}\)</span>, tout le fichier
+peut être chargé et trié en mémoire. Une seule lecture
+suffit.</p></li>
+<li><p>Avec une mémoire <span class="math notranslate nohighlight">\(M = 2 \text{Mo}\)</span>, soit 500 blocs.</p>
+<blockquote>
+<div><ul>
+<li><p>on divise le fichier en <span class="math notranslate nohighlight">\(\frac{307}{2} = 154\)</span>
+fragments. Chaque fragment est trié en mémoire et stocké
+sur le disque.</p>
+<p>On a lu et écrit une fois le fichier en entier, soit 614 Mo.</p>
+</li>
+<li><p>On associe chaque fragment à une bloc en mémoire, et on
+effectue la fusion (noter qu’il reste <span class="math notranslate nohighlight">\(500 - 154\)</span>
+blocs disponibles).</p>
+<p>On a lu encore une fois le fichier, pour un coût
+total de <span class="math notranslate nohighlight">\(614 + 307 = 921\)</span>  Mo.</p>
+</li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Avec une mémoire <span class="math notranslate nohighlight">\(M = 1 \text{Mo}\)</span>, soit 250 blocs.</p>
+<ul>
+<li><p>on divise le fichier en <span class="math notranslate nohighlight">\(307\)</span>
+fragments. Chaque fragment est trié en mémoire et stocké
+sur le disque.</p>
+<p>On a lu et écrit une fois le fichier en entier, soit 714 Mo.</p>
+</li>
+<li><p>On associe les 249 premiers fragments  à un bloc en mémoire, et on
+effectue la fusion (on garde la dernière bloc pour la sortie).
+On obtient un nouveau fragment <span class="math notranslate nohighlight">\(F_1\)</span> de taille 249  Mo.</p>
+<p>On prend les <span class="math notranslate nohighlight">\(307 - 249 = 58\)</span>  fragments qui restent
+et on les fusionne: on obtient <span class="math notranslate nohighlight">\(F_2\)</span> , de taille 58 Mo.</p>
+<p>On a lu et écrit encore une fois le fichier, pour un coût
+total de <span class="math notranslate nohighlight">\(614 \times 2 = 1228\)</span>  Mo.</p>
+</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<div><ul class="simple">
+<li><p>Finalement on prend les deux derniers fragments, <span class="math notranslate nohighlight">\(F_1\)</span>
+et <span class="math notranslate nohighlight">\(F_2\)</span> , et on les fusionne. Cela reprsente une lecture
+de plus, soit <span class="math notranslate nohighlight">\(1 228 + 307 = 1 535\)</span>  Mo.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<p>Il est remarquable qu’avec seulement 2 Mo, on arrive
+à trier en une seule étape de fusion un fichier qui est 150 fois
+plus gros. Il faut faire un effort considérable
+d’allocation de mémoire (passer de 2 Mo à 307) pour
+arriver à éliminer cette étape de fusion. Noter qu’avec 300 Mo,
+on garde le même nombre de niveaux de fusion qu’avec 2 Mo
+(quelques techniques subtiles, non présentées ici, permettent quand même
+d’obtenir de meilleures performances dans ce cas).</p>
+<p>En revanche, avec une mémoire de 1Mo, on doit effectuer
+une étape de fusion en plus, ce qui représente plus
+de 700 E/S supplémentaires.</p>
+<p>En conclusion: on doit pouvoir effectuer un tri avec
+une seule phase de fusion, à condition de connaître
+la taille des tables qui peuvent être à trier, et d’allouer
+une mémoire suffisante au tri.</p>
+</section>
+<section id="l-operateur-de-tri-fusion">
+<h3>L’opérateur de tri-fusion<a class="headerlink" href="#l-operateur-de-tri-fusion" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Comme implanter le tri-fusion sous forme d’itérateur? Réponse:
+<em>l’ensemble du tri est effectué dans la fonction open(), le next() ne fait
+que lire un par un les nuplets du fichier trié stocké dans la zone temporaire</em>.
+Cela s’explique par le fait qu’il est impossible de fournir un résultat tant
+que l’ensemble du tri n’a pas été effectué. C’est seulement alors que l’on peut
+savoir quel est le plus petit élément, et le fournir comme réponse au premier appel <em>next()</em>.</p>
+<p>La conséquence essentielle est que le tri est un opérateur <em>bloquant</em>. Quand on exécute
+une requête contenant un tri, rien ne se passe tant que le résultat n’a pas été complètement
+trié. Entre la requête</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Film</span>
+</pre></div>
+</div>
+<p>et la requête</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Film</span> <span class="k">order</span> <span class="k">by</span> <span class="n">titre</span>
+</pre></div>
+</div>
+<p>La différence est donc considérable. Quelle que soit la taille de la table, l’exécution
+de la première donne un premier nuplet instantanément: il suffit que le plan accède
+au premier enregistrement du fichier.  Dans le second cas, il faudra attendre que
+toute la table ait été lue et triée.</p>
+</section>
+<section id="id2">
+<h3>Quiz<a class="headerlink" href="#id2" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Avec une mémoire de <span class="math notranslate nohighlight">\(M\)</span> blocs, quelle est la taille des fragments ?</p>
+<div class="reauthoring_embedded_quiz" id="defSort1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 1</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(M\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(M/2\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Avec une mémoire de <span class="math notranslate nohighlight">\(M+1\)</span> blocs, je peux fusionner <span class="math notranslate nohighlight">\(M\)</span> fragments. Quelle est la taille maximale de fichier obtenu
+par une étape de fusion ?</p>
+<div class="reauthoring_embedded_quiz" id="defSort2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>2M</em></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(M^2\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(M^M\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div><p>On en déduit la taille maximale d’un fichier triable avec une fusion.</p>
+</li>
+<li><p>Je peux fusionner les fragments issus d’une fusion de fragments. Avec deux
+étapes de fusion, la taille maximale du fichier trié obtenu est de :</p>
+<div class="reauthoring_embedded_quiz" id="defSort3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>3M</em></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(M^3\)</span></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\((2M)^2\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Quelle est la formule permettant d’obtenir le nombre de fusions nécessaires pour trier un fichier de taille <em>F</em>:</p>
+<div class="reauthoring_embedded_quiz" id="defSort4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <em>F/M</em></p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> <span class="math notranslate nohighlight">\(F+M\)</span></p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> <span class="math notranslate nohighlight">\(\log_M(F)\)</span></p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+</ul>
+</div></blockquote>
+</section>
+</section>
+<section id="s4-algorithmes-de-jointure">
+<h2>S4: Algorithmes de jointure<a class="headerlink" href="#s4-algorithmes-de-jointure" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-supports-complementaires admonition">
+<p class="admonition-title">Supports complémentaires:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="http://sys.bdpedia.fr/files/slalgojoin.pdf">Diapositives: algorithmes de jointure</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a424a4rd7jddw/">Vidéo algorithmes de jointure (partie 1)</a></p></li>
+<li><p><a class="reference external" href="https://mediaserver.lecnam.net/permalink/v125f35a4250dhtk787f/">Vidéo algorithmes de jointure (partie 2)</a></p></li>
+</ul>
+</div>
+<p>Passons maintenant aux <em>algorithmes de jointure</em>.  Avec les opérateurs
+présentés dans cette section, nous complétons notre catalogue d’opérateurs
+et nous saurons exécuter toutes les requêtes SQL dites <em>conjonctives</em>,
+c’est-à-dire ne comprenant ni négation (<code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">exists</span></code>) ni union. Cela couvre
+<em>beaucoup</em> de requêtes et montre que l’implantation d’un moteur d’exécution  de
+requêtes SQL n’est finalement pas si compliqué.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">,</span> <span class="p">..,</span> <span class="n">an</span>
+<span class="k">from</span> <span class="n">T1</span><span class="p">,</span> <span class="n">T2</span><span class="p">,</span> <span class="p">...,</span> <span class="n">Tm</span>
+<span class="k">where</span> <span class="n">T1</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">T2</span><span class="p">.</span><span class="n">y</span> <span class="k">and</span> <span class="p">...</span>
+<span class="k">order</span> <span class="k">by</span> <span class="p">...</span>
+</pre></div>
+</div>
+<p>La jointure est une des opérations
+les plus courantes et les plus coûteuses, et savoir
+l’évaluer de manière efficace est une condition indispensable
+pour obtenir un système performant.
+On peut classer les algorithmes de jointure en deux catégories,
+suivant l’absence ou la présence d’index sur les attributs de jointure.
+En l’absence d’index, les trois algorithmes les plus répandus sont les suivants:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>L’algorithme le plus simple est la <em>jointure
+par boucles imbriquées</em>. Il est malheureusement
+très coûteux dès que les tables à joindre sont
+un tant soit peu volumineuses.</p></li>
+<li><p>L’algorithme de <em>jointure par tri-fusion</em> est basé,
+comme son nom l’indique, sur un tri préalable
+des deux tables. C’est le plus ancien et le plus répandu
+des concurrents de l’algorithme par boucles imbriquées,
+auquel il se compare avantageusement dès que
+la taille des tables dépasse celle de la mémoire disponible.</p></li>
+<li><p>Enfin la <em>jointure par hachage</em> est une technique qui donne de très bons résultats quand
+une des tables au moins tient en mémoire.</p></li>
+</ul>
+</div></blockquote>
+<p>Quand un index est disponible (ce qui est le cas le plus courant, notamment
+quand la jointure associe la clé primaire d’une table à la clé étrangère d’une autre),
+on utilise une variante de
+l’algorithme par boucles imbriquées avec traversée d’index,
+dite <em>jointure par boucles indexée</em>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>si les deux tables sont indexées, on utilise parfois
+une variante du tri-fusion sur les index, mais cette technique
+pose quelques problèmes et nous ne l’évoquerons que brièvement.</p>
+</div>
+<p>On note dans ce qui suit <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span>
+les relations à joindre et <span class="math notranslate nohighlight">\(T\)</span>  la relation
+résultat. Le nombre de blocs est noté respectivement par <span class="math notranslate nohighlight">\(B_R\)</span>
+et <span class="math notranslate nohighlight">\(B_S\)</span> . Le
+nombre d’enregistrements de chaque relation est respectivement <span class="math notranslate nohighlight">\(N_R\)</span>  et
+<span class="math notranslate nohighlight">\(N_S\)</span>.</p>
+<p>Nous commençons par l’algorithme le plus efficace et le plus courant: celui
+utilisant un index.</p>
+<section id="jointure-avec-un-index">
+<h3>Jointure avec un index<a class="headerlink" href="#jointure-avec-un-index" title="Lien permanent vers ce titre">¶</a></h3>
+<p>La jointure entre deux tables comporte le plus souvent une condition
+de jointure qui associe la clé primaire d’une table à la clé étrangère de
+l’autre. Voici quelques exemples pour s’en convaincre.</p>
+<blockquote>
+<div><ul>
+<li><p>Les films et leur metteur en scène</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Film</span> <span class="k">as</span> <span class="n">f</span><span class="p">,</span> <span class="n">Artiste</span> <span class="k">as</span> <span class="n">a</span>
+<span class="k">where</span> <span class="n">f</span><span class="p">.</span><span class="n">id_realisateur</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">id</span>
+</pre></div>
+</div>
+</li>
+<li><p>Les artistes et leurs rôles</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Artiste</span> <span class="k">as</span> <span class="n">a</span><span class="p">,</span> <span class="k">Role</span> <span class="k">as</span> <span class="n">r</span>
+<span class="k">where</span> <span class="n">a</span><span class="p">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">id_acteur</span>
+</pre></div>
+</div>
+</li>
+<li><p>Les employés et leur département</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">emp</span> <span class="n">e</span><span class="p">,</span> <span class="n">dept</span> <span class="n">d</span>
+<span class="k">where</span> <span class="n">e</span><span class="p">.</span><span class="n">dnum</span> <span class="o">=</span> <span class="n">d</span><span class="p">.</span><span class="n">num</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</div></blockquote>
+<p>Cette forme de jointure est courante car elle est « naturelle »: elle consiste
+à reconstruire l’information dispersée entre plusieurs tables par le processus
+de normalisation du schéma. Le point important (pour les performances) est
+que la condition de jointure porte sur au moins un attribut indexé (la clé
+primaire) et éventuellement sur deux si la clé étrangère est, elle aussi,
+indexée.</p>
+<p>Cette situation permet l’exécution d’un algorithme à la fois très simple
+et assez efficace (on suppose pour l’instant que seule la clé primaire
+est indexée):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>on parcourt séquentiellement la table contenant la clé étrangère;</p></li>
+<li><p>pour chaque nuplet, on utilise la valeur de la clé étrangère pour
+accéder à l’index sur la clé primaire
+de la second table: on récupère l’adresse <em>adr</em> d’un nuplet;</p></li>
+<li><p>il reste à effectuer un accès direct, avec l’adresse <em>adr</em>, pour
+obtenir le second nuplet et constituer la paire.</p></li>
+</ul>
+</div></blockquote>
+<p>Prenons comme exemple la première jointure SQL donnée ci-dessus. On va parcourir
+la table Film qui contient la clé étrangère <code class="docutils literal notranslate"><span class="pre">id_réalisateur</span></code>. Pour
+chaque nuplet <code class="docutils literal notranslate"><span class="pre">film</span></code> obtenu durant ce parcours, on prend la valeur
+de <code class="docutils literal notranslate"><span class="pre">id_réalisateur</span></code> et on recherche, avec l’index, l’adresse
+de l’artiste correspondant. Il reste à effectuer un accès direct à la table Artiste.</p>
+<p>Nous avons un nouvel opérateur que nous appellerons <code class="docutils literal notranslate"><span class="pre">IndexedJoin</span></code>. Il
+consomme des données fournis par deux autres opérateurs que nous avons déjà définis:
+un parcours séquentiel <code class="docutils literal notranslate"><span class="pre">FullScan</span></code>, un parcours d’index <code class="docutils literal notranslate"><span class="pre">IndexScan</span></code>.
+Il est complété par un troisième, lui aussi déjà étudié: <code class="docutils literal notranslate"><span class="pre">DirectAccess</span></code>.
+La forme du programme qui effectue ce type de jointure est illustrée
+par la  <a class="reference internal" href="#planex-indexedjoin"><span class="std std-numref">Fig. 6.9</span></a>.
+Elle peut paraître un peu complexe,
+mais elle vaut la peine d’être étudiée soigneusement. Le motif est récurrent et doit
+pouvoir être repéré quand on étudie un plan d’exécution.</p>
+<figure class="align-center" id="id12">
+<span id="planex-indexedjoin"></span><a class="reference internal image-reference" href="_images/planEx-indexedjoin.png"><img alt="_images/planEx-indexedjoin.png" src="_images/planEx-indexedjoin.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.9 </span><span class="caption-text">Algorithme de jointure avec index</span><a class="headerlink" href="#id12" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>L’opérateur <code class="docutils literal notranslate"><span class="pre">IndexedJoin</span></code> lui-même fait peu de choses puisqu’il s’appuie
+essentiellement sur d’autres composants qui font déjà une bonne partie du travail.
+Implanter un moteur d’exécution, tâche qui peut sembler extrêmement complexe
+à  priori, s’avère en fait relativement simple avec cette approche très générique
+et décomposant les opérations nécessaires en briques élémentaires.</p>
+<p>Voici le pseudo-code de la fonction <code class="docutils literal notranslate"><span class="pre">next()</span></code> de l’opérateur de jointure.
+Il faudrait, dans une implantation réelle, ajouter quelques contrôles,
+mais l’essentiel est là, et reste relativement simple.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> nextIndexJoin
+<span class="o">{</span>
+  <span class="c1"># $tScan est l&#39;opérateur de parcours séquentiel de la première table</span>
+  <span class="c1"># On récupère un nuplet</span>
+  <span class="nv">$nuplet</span> <span class="o">=</span> <span class="nv">$tScan</span>.next<span class="o">()</span><span class="p">;</span>
+
+  <span class="c1"># On crée un opérateur de parcours d&#39;index</span>
+  <span class="nv">iScan</span> <span class="o">=</span> new IndexScan <span class="o">()</span><span class="p">;</span>
+  <span class="c1"># On exécute le parcours d&#39;index avec la clé étrangère</span>
+  <span class="nv">$iScan</span>.open <span class="o">(</span><span class="nv">$nuplet</span>.foreignKey<span class="o">)</span><span class="p">;</span>
+  <span class="c1"># On récupère l&#39;adresse</span>
+  <span class="nv">addr</span> <span class="o">=</span> <span class="nv">$iScan</span>.next<span class="o">()</span><span class="p">;</span>
+
+  <span class="c1"># Et on renvoie la paire avec le nuplet et l&#39;adresse</span>
+  <span class="k">return</span> <span class="o">[</span><span class="nv">$nuplet</span>, <span class="nv">$addr</span><span class="o">]</span><span class="p">;</span>
+ <span class="o">}</span>
+</pre></div>
+</div>
+<p>Cet algorithme peut être considéré comme le meilleur possible pour une jointure.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Il s’appuie essentiellement sur un parcours d’index qui, en pratique,
+va s’effectuer en mémoire RAM car un arbre-B est compact, très sollicité,
+et résidera dans le cache la plupart du temps.</p></li>
+<li><p>Il permet un pipelinage complet: quelle que soit la taille des données,
+une application communiquant avec ce plan d’exécution recevra tout
+de suite la première paire-résultat, et obtiendra les suivantes
+avec très peu de latence à chaque appel <em>next()</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>En contrepartie, l’algorithme nécessite des accès directs (aléatoires)
+pour obtenir les nuplets de la seconde table. C’est loin d’être très efficace,
+pour des raisons déjà soulignées, et explique que
+la jointure reste une opération coûteuse.</p>
+<p>Pour conclure sur cet algorithme, notez qu’il est présenté ici comme
+s’appuyant sur un parcours séquentiel, mais qu’il fonctionne tout
+aussi bien si la source de données (à gauche) est n’importe quel autre opérateur.
+Il est donc très facile à intégrer dans les plans d’exécution très complexes
+comprenant plusieurs jointures, sélection, projections, etc.</p>
+</section>
+<section id="jointure-avec-deux-index">
+<h3>Jointure avec deux index<a class="headerlink" href="#jointure-avec-deux-index" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Peut-on faire mieux si les <em>deux</em> tables sont indexées?
+Lorsque <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span>   ont un index sur
+l’attribut de jointure, on peut tirer parti du fait
+que les feuilles de ceux-ci sont triées sur
+cet attribut.  En fusionnant les feuilles des index <span class="math notranslate nohighlight">\(B_R\)</span>
+et <span class="math notranslate nohighlight">\(B_S\)</span>  de la même manière que pendant la phase de fusion de l’algorithme de
+jointure par tri-fusion, on obtient une liste de couples d’adresses d’enregistrements de <span class="math notranslate nohighlight">\(R\)</span> et
+<span class="math notranslate nohighlight">\(S\)</span>  à joindre. Cette première phase est très efficace, car les
+deux index sont très probablement en mémoire et l’algorithme de fusion
+est lui-même simple et performant.</p>
+<p>La deuxième phase consiste  à lire les enregistrements par deux accès directs,
+l’un sur  <span class="math notranslate nohighlight">\(R\)</span>,  l’autre sur  <span class="math notranslate nohighlight">\(S\)</span>. C’est ici que les choses
+se compliquent, car la multiplication des accès aléatoires devient très pénalisante.
+Comme déjà discuté, si une partie significative d’une table est concernée, il
+est préférable d’efectuer un parcours séquentiel qu’une succession d’accès directs.
+Pour cette raison, beaucoup
+de SGBD (dont Oracle), en
+présence d’index sur l’attribut de jointure dans les deux relations,
+préfèrent quand même appliquer l’algorithme <code class="docutils literal notranslate"><span class="pre">IndexedJoin</span></code>. L’amélioration
+permise par cette situation reste le choix de la table à parcourir séquentiellement:
+pour des raisons évidentes on prend la plus petite.</p>
+</section>
+<section id="jointure-par-boucles-imbriquees">
+<h3>Jointure par boucles imbriquées<a class="headerlink" href="#jointure-par-boucles-imbriquees" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Nous abordons maintenant le cas des jointures où aucun index n’est disponible.
+Disons tout de suite que les performances sont alors nettement moins bonnes, et
+devraient amener à considérer la création d’un index approprié pour des
+requêtes fréquemment utilisées.</p>
+<p>L’algorithme direct et naïf, que nous appellerons <code class="docutils literal notranslate"><span class="pre">NestedLoop</span></code>,
+s’adapte à tous les prédicats de jointure.
+Il consiste à énumérer tous les enregistrements dans le produit cartésien de
+<span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span>  (en d’autres termes, toutes les paires possibles)
+et garde ceux qui satisfont le prédicat  de jointure.  La fonction de base
+est la jointure de deux listes en mémoire, <code class="docutils literal notranslate"><span class="pre">L1</span></code> et <code class="docutils literal notranslate"><span class="pre">L2</span></code>,
+et se  décrit simplement comme suit:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span> <span class="k">function</span> JoinList
+ <span class="o">{</span>
+   <span class="c1"># $L1 est la liste dite &quot;extérieure&quot;</span>
+   <span class="c1"># $L2 est la liste dite &quot;intérieure&quot;</span>
+   <span class="c1"># $condition est la condition de jointure</span>
+   <span class="nv">resultat</span> <span class="o">=</span> <span class="o">[]</span><span class="p">;</span>
+
+   <span class="k">for</span> nuplet1 <span class="k">in</span> <span class="nv">$L1</span>
+   <span class="k">do</span>
+    <span class="k">for</span> nuplet2 <span class="k">in</span> <span class="nv">$L2</span>
+    <span class="k">do</span>
+      <span class="k">if</span> <span class="o">(</span>condition <span class="o">(</span><span class="nv">$nuplet1</span>, <span class="nv">$nuplet2</span><span class="o">)</span> <span class="o">=</span> <span class="nb">true</span><span class="o">)</span> the
+        <span class="nv">$resultats</span><span class="o">[]</span> <span class="o">=</span> <span class="o">(</span><span class="nv">$nuplet1</span>, <span class="nv">$nuplet2</span><span class="o">)</span><span class="p">;</span>
+      <span class="k">fi</span>
+    <span class="k">done</span>
+  <span class="k">done</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>Le coût de cette fonction se mesure au nombre de fois où on effectue le test
+de la condition de jointure. Il est facile de voir que chaque nuplet de <code class="docutils literal notranslate"><span class="pre">L1</span></code>
+est comparé à chaque nuplet de <code class="docutils literal notranslate"><span class="pre">L2</span></code>, d’où un coût de <span class="math notranslate nohighlight">\(|L1| \times |L2|\)</span>.</p>
+<p>Maintenant, ce qui nous intéresse dans un contexte de base de données, c’est aussi
+(surtout) le nombre de lectures de blocs nécessaires. Dès lors que la jointure implique
+des accès disques, ces entrées/sorties (E/S) constituent le facteur
+prédominant. La méthode de base, illustrée par la  <a class="reference internal" href="#nestedloop"><span class="std std-numref">Fig. 6.10</span></a>,
+consiste à charger toutes les paires de blocs en mémoire, et à appliquer
+la fonction <code class="docutils literal notranslate"><span class="pre">JoinList</span></code> sur chaque paire.</p>
+<figure class="align-center" id="id13">
+<span id="nestedloop"></span><a class="reference internal image-reference" href="_images/nestedloop.png"><img alt="_images/nestedloop.png" src="_images/nestedloop.png" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.10 </span><span class="caption-text">Boucle imbriquée sur les blocs</span><a class="headerlink" href="#id13" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le pseudo-code suivant montre la jointure par boucle imbriquée,
+constituant toutes les paires de blocs par un unique parcours séquentiel
+sur la première table, et des parcours séquentiels répétés sur la seconde.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span> <span class="k">function</span> NestedLoopJoin
+ <span class="o">{</span>
+   <span class="c1"># $R est la tablee dite &quot;extérieure&quot;</span>
+   <span class="c1"># $S est la table dite &quot;intérieure&quot;</span>
+   <span class="c1"># $condition est la condition de jointure</span>
+   <span class="nv">resultat</span> <span class="o">=</span> <span class="o">[]</span><span class="p">;</span>
+
+   <span class="k">for</span> blocR <span class="k">in</span> <span class="nv">$R</span>
+   <span class="k">do</span>
+    <span class="k">for</span> blocS <span class="k">in</span> <span class="nv">$S</span>
+    <span class="k">do</span>
+      JoinList <span class="o">(</span><span class="nv">$blocR</span>, <span class="nv">$blocS</span><span class="o">)</span>
+    <span class="k">done</span>
+  <span class="k">done</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>Le principale mérite (le seul) de cet algorithme est de demander
+très peu de mémoire: deux blocs suffisent. En revanche, le nombre de lectures
+et très important:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>il faut lire toute la table <em>R</em>,</p></li>
+<li><p>il faut lire autant de fois la table <em>S</em> qu’il y a de blocs dans <em>R</em>.</p></li>
+</ul>
+</div></blockquote>
+<p>Le nombre de lectures est donc <span class="math notranslate nohighlight">\(B_R + B_R \times B_S\)</span>.  Cette petite
+formule montre au passage qu’il est préférable de prendre comme table
+extérieure la plus petite des deux.</p>
+<p>Cela étant, on peut faire beaucoup mieux en utilisant plus de mémoire.
+Soit <span class="math notranslate nohighlight">\(R\)</span> la table la plus petite. Si le nombre de blocs
+<span class="math notranslate nohighlight">\(M\)</span>  est
+au moins égal à <span class="math notranslate nohighlight">\(B_R + 1\)</span>, la table  <span class="math notranslate nohighlight">\(R\)</span>  tient en mémoire
+centrale. On peut alors lire <span class="math notranslate nohighlight">\(S\)</span> <em>une seule fois</em>, bloc par bloc,
+en effectuant à chaque fois la jointure entre le bloc et l’ensemble
+des blocs de <span class="math notranslate nohighlight">\(R\)</span>  chargés en RAM (<a class="reference internal" href="#nestedloop-improved"><span class="std std-numref">Fig. 6.11</span></a>).</p>
+<figure class="align-center" id="id14">
+<span id="nestedloop-improved"></span><a class="reference internal image-reference" href="_images/nestedloop-improved.png"><img alt="_images/nestedloop-improved.png" src="_images/nestedloop-improved.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.11 </span><span class="caption-text">Boucle imbriquée avec chargement complet d’une table en RAM</span><a class="headerlink" href="#id14" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Avec cette solution (très fréquemment applicable en ces temps où la mémoire
+RAM est devenue très grosse), le coût est de <span class="math notranslate nohighlight">\(B_R + B_S\)</span>:
+une seule lecture des deux tables suffit. D’un coût
+quadratique dans les tailles des relations, lorsqu’on n’a que 3
+blocs, on est passé à un coût linéaire. Cet algorithme en devient très efficace
+et simple à implanter.</p>
+<p>S’il s’agit d’une équi-jointure, une variante encore améliorée
+de cet algorithme consiste  à hacher <span class="math notranslate nohighlight">\(R\)</span>
+en mémoire à l’aide d’une fonction de hachage <span class="math notranslate nohighlight">\(h\)</span> .
+Alors pour chaque
+enregistrement de <span class="math notranslate nohighlight">\(S\)</span>, on cherche par <span class="math notranslate nohighlight">\(h(s)\)</span>  les
+enregistrements  de <span class="math notranslate nohighlight">\(R\)</span>  joignables. Le
+coût en E/S est inchangé, mais le coût CPU est linéaire
+dans le nombre d’enregistrement  des tables <span class="math notranslate nohighlight">\(N_R + N_S\)</span>  (alors qu’avec la
+procédure <em>JoinList</em> c’est une fonction quadratique du nombre
+d’enregistrements).</p>
+<figure class="align-center" id="id15">
+<span id="nestedloop-fragments"></span><a class="reference internal image-reference" href="_images/nestedloop-fragments.png"><img alt="_images/nestedloop-fragments.png" src="_images/nestedloop-fragments.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.12 </span><span class="caption-text">Boucle imbriquée avec chargement par fragments d’une table en RAM</span><a class="headerlink" href="#id15" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Si <span class="math notranslate nohighlight">\(R\)</span>  ne tient pas en mémoire
+car <span class="math notranslate nohighlight">\(B_R &gt; M -1\)</span>, il reste la version la plus générale
+de la jointure par boucles imbriquées (<a class="reference internal" href="#nestedloop-fragments"><span class="std std-numref">Fig. 6.12</span></a>):
+on  découpe <span class="math notranslate nohighlight">\(R\)</span> en fragments
+de taille <span class="math notranslate nohighlight">\(M-1\)</span> blocs et on utilise la variante ci-dessus pour
+chaque groupe. <span class="math notranslate nohighlight">\(R\)</span>  est lue
+une seule fois, groupe par groupe, <span class="math notranslate nohighlight">\(S\)</span> est lue
+<span class="math notranslate nohighlight">\(\lceil \frac{B_R}{M-1} \rceil\)</span> fois.
+On obtient un coût final de:</p>
+<div class="math notranslate nohighlight">
+\[B_R + \lceil \frac{B_R}{M-1} \rceil \times B_S\]</div>
+<div class="admonition-exemple admonition">
+<p class="admonition-title">Exemple</p>
+<p>On prend l’exemple d’une jointure entre Film et Artiste  en
+supposant, pour les besoins de la cause, qu’il n’y
+a pas d’index. La table Film occupe 1000 blocs,
+et la table Artiste 10 000 blocs. On suppose
+que la mémoire disponible a pour taille <span class="math notranslate nohighlight">\(M=251\)</span>  blocs.</p>
+<blockquote>
+<div><ul>
+<li><p>En prenant la table Artiste comme table extérieure,
+on obtient le coût suivant:</p>
+<div class="math notranslate nohighlight">
+\[10 000 + \lceil \frac{10000}{250}  \rceil \times 1000 = 50 000\]</div>
+</li>
+<li><p>Et en prenant la table Film comme table extérieure:</p>
+<div class="math notranslate nohighlight">
+\[1 000 + \lceil \frac{1000}{250} \rceil \times 1000 = 41 000\]</div>
+</li>
+</ul>
+</div></blockquote>
+<p>Conclusion: il faut prendre la table la plus petite comme
+table extérieure. Cela suppose bien entendu que l’optimiseur
+dispose des statistiques suffisantes.</p>
+</div>
+<p>En résumé, cette technique est simple, et relativement efficace
+quand une des deux relations peut être découpée
+en un nombre limité de groupes (autrement dit,
+quand sa taille par rapport à la mémoire disponible reste limitée).
+Elle tend vite cependant à être très coûteuse en E/S,
+et on lui préfère donc en général la jointure
+par tri-fusion, ou la jointure par hachage, présentées
+dans ce qui suit.</p>
+</section>
+<section id="jointure-par-tri-fusion">
+<h3>Jointure par tri-fusion<a class="headerlink" href="#jointure-par-tri-fusion" title="Lien permanent vers ce titre">¶</a></h3>
+<p>L’algorithme de jointure par tri-fusion que nous présentons ici
+s’applique à l’équijointure (jointure avec égalité).
+C’est un exemple de technique à deux phases:
+la première  consiste à trier les deux tables sur l’attribut de
+jointure (si elles ne le sont pas déjà).
+Ce tri facilite l’identification des
+paires d’enregistrement
+partageant  la même valeur pour l’attribut de jointure.</p>
+<p>À l’issue du tri on dispose
+de deux fichiers temporaires stockés sur disque</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>En fait on évite d’écrire le résultat de la dernière
+étape de fusion du tri, en prenant « à la volée »
+les enregistrements produits par l’opérateur de tri. Il s’agit
+d’un exemple de petites astuces qui peuvent avoir des conséquences
+importantes, mais dont nous omettons en général la description
+pour des raisons  de clarté.</p>
+</div>
+<p>On utilise l’algorithme de tri externe vu précédemment pour cette
+première étape. La deuxième phase, dite de fusion, consiste à lire bloc
+par bloc chacun des deux fichiers temporaires et à parcourir
+séquentiellement en parallèle ces deux fichiers pour trouver
+les enregistrements à joindre. Comme les fichiers sont triés, sauf
+cas exceptionnel, chaque bloc  n’est lu qu’une fois.</p>
+<p>Prenons l’équijointure  de <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span> sur les attributs
+a et b.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">R</span><span class="p">,</span> <span class="n">S</span> <span class="k">where</span> <span class="n">R</span><span class="p">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">S</span><span class="p">.</span><span class="n">b</span>
+</pre></div>
+</div>
+<p>On va trier <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span> et on parcourt ensuite les tables
+triées en parallèle.
+Regardons plus en détail la fusion. C’est une variante très proche
+de l’agorithme de fusion de liste.
+On commence avec les premiers enregistrements <span class="math notranslate nohighlight">\(r_1\)</span>
+et <span class="math notranslate nohighlight">\(s_1\)</span>  de chaque
+table.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Si <span class="math notranslate nohighlight">\(r_1.a = s_1.b\)</span> , on joint les deux enregistrements,  on passe au
+enregistrements suivants, jusqu’à ce que <span class="math notranslate nohighlight">\(r_i.a \not= s_i.b\)</span>.</p></li>
+<li><p>Si <span class="math notranslate nohighlight">\(r_1.a &lt; s_1.b\)</span>, on avance sur la liste de <span class="math notranslate nohighlight">\(R\)</span>.</p></li>
+<li><p>Si <span class="math notranslate nohighlight">\(r_1.a &gt; s_1.b\)</span>, on avance sur la liste de <span class="math notranslate nohighlight">\(S\)</span>.</p></li>
+</ul>
+</div></blockquote>
+<p>Donc on balaie une table tant que l’attribut de jointure a une valeur
+inférieure à la valeur courante de l’attribut de jointure dans l’autre
+table. Quand il y a égalité, on fait la jointure. Ceci peut impliquer
+la jointure entre plusieurs enregistrements de <span class="math notranslate nohighlight">\(R\)</span>  en séquence et plusieurs
+enregistrements de <span class="math notranslate nohighlight">\(S\)</span>  en séquence. Ensuite on recommence.</p>
+<p>L’opérateur de jointure peut s’appuyer sur l’opérateur de tri, déjà
+étudié. Il suffit donc d’implanter la jointure de deux listes triées
+dans un opérateur <code class="docutils literal notranslate"><span class="pre">Merge</span></code>. Voici la fonction <code class="docutils literal notranslate"><span class="pre">next()</span></code> de cet opérateur,
+avec deux opérateurs de tris opérant respectivement sur la première
+et la seconde table (plus généralement, ces opérateurs de tri peuvent
+opérer sur n’importe quel sous-plan d’exécution).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span> <span class="k">function</span> nextMerge
+ <span class="o">{</span>
+   <span class="c1"># $triR est l&#39;opérateur de tri sur la première table</span>
+   <span class="c1"># $triS est l&#39;opérateur de tri sur la seconde table</span>
+   <span class="c1"># a et b désignent les attributs de jointure</span>
+
+   <span class="c1"># Récupération de nuplets fournis par les opérateurs</span>
+   <span class="nv">$nupletR</span> <span class="o">=</span> <span class="nv">$triR</span>.next<span class="o">()</span><span class="p">;</span>
+   <span class="nv">$nupletS</span> <span class="o">=</span> <span class="nv">$triS</span>.next<span class="o">()</span><span class="p">;</span>
+
+   <span class="c1"># Tant que les deux nuplets de joignent pas sur a et b, on avance</span>
+   <span class="c1"># sur une des deux listes</span>
+  <span class="k">while</span> <span class="o">(</span><span class="nv">$nupletR</span>.a !<span class="o">=</span> <span class="nv">$nupletS</span>.b<span class="o">)</span> <span class="k">do</span>
+    <span class="k">if</span> <span class="o">(</span><span class="nv">$nupletR</span>.a &lt; <span class="nv">$nupletS</span>.b<span class="o">)</span> <span class="k">then</span>
+      <span class="nv">$nupletR</span> <span class="o">=</span> <span class="nv">$triR</span>.next<span class="o">()</span><span class="p">;</span>
+     <span class="k">else</span>
+      <span class="nv">$nupletS</span> <span class="o">=</span> <span class="nv">$triR</span>.next<span class="o">()</span><span class="p">;</span>
+     <span class="k">fi</span>
+  <span class="k">done</span>
+
+  <span class="k">return</span> <span class="o">[</span><span class="nv">$nupletR</span>, <span class="nv">$nupletS</span><span class="o">]</span><span class="p">;</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+<p>Le plan d’exécution typique d’une jointure
+par tri-fusion avec cet opérateur
+est illustré par la <a class="reference internal" href="#planex-trifusion"><span class="std std-numref">Fig. 6.13</span></a>.</p>
+<figure class="align-center" id="id16">
+<span id="planex-trifusion"></span><a class="reference internal image-reference" href="_images/planEx-trifusion.png"><img alt="_images/planEx-trifusion.png" src="_images/planEx-trifusion.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.13 </span><span class="caption-text">Plan d’exécution type pour la jointure par tri-fusion</span><a class="headerlink" href="#id16" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>La jointure  <span class="math notranslate nohighlight">\(s\)</span>  par tri-fusion
+est illustrée dans la  <a class="reference internal" href="#sortmerge"><span class="std std-numref">Fig. 6.14</span></a>.</p>
+<figure class="align-center" id="id17">
+<span id="sortmerge"></span><a class="reference internal image-reference" href="_images/sortmerge.png"><img alt="_images/sortmerge.png" src="_images/sortmerge.png" style="width: 60%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.14 </span><span class="caption-text">Exemple de jointure par tri-fusion</span><a class="headerlink" href="#id17" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le coût de la jointure par tri-fusion est important, et
+impose une latence due à la phase de tri initiale. Une fois la phase
+de fusion débutée, le débit est en revanche très rapide. La performance
+dépend donc essentiellement du tri, et donc de la mémoire disponible. C’est
+l’algorithme privilégié par les SGBD pour la jointure sans index de très
+grosses tables (situation qu’il vaut mieux éviter quand c’est possible).</p>
+</section>
+<section id="jointure-par-hachage">
+<h3>Jointure par hachage<a class="headerlink" href="#jointure-par-hachage" title="Lien permanent vers ce titre">¶</a></h3>
+<p>Comme tous les algorithmes à base de hachage, cet algorithme ne
+peut s’appliquer qu’à une équi-jointure.
+Comme l’algorithme de tri-fusion, il comprend deux phases:
+une phase de partitionnement  des deux relations
+en <span class="math notranslate nohighlight">\(k\)</span>  fragments chacune, <em>avec la même fonction de hachage</em>,
+et une phase de jointure proprement dite.</p>
+<p>La première phase a pour but de réduire le coût de la jointure
+proprement dite de la deuxième phase. Au lieu de comparer tous les
+enregistrements de <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span>, on ne
+comparera les enregistrements de chaque fragment <span class="math notranslate nohighlight">\(F_R^i\)</span>
+de <span class="math notranslate nohighlight">\(R\)</span>  qu’aux
+enregistrements du fragment <span class="math notranslate nohighlight">\(F_S^i\)</span>  <em>associée</em> de <span class="math notranslate nohighlight">\(S\)</span>.
+Notez bien qu’il s’agit du même exposant <span class="math notranslate nohighlight">\(i\)</span>: les fragements
+sont associés par paire, ce qui implique que l’on a la garantie
+qu’aucun nuplet de   <span class="math notranslate nohighlight">\(F_R^i\)</span> ne joint avec un nuplet
+de  <span class="math notranslate nohighlight">\(F_S^j\)</span>, pour  <span class="math notranslate nohighlight">\(i \not= j\)</span>.</p>
+<p>Le partitionnement de <span class="math notranslate nohighlight">\(R\)</span>  se fait par hachage. On suppose toujours
+que <code class="docutils literal notranslate"><span class="pre">a</span></code> et <code class="docutils literal notranslate"><span class="pre">b</span></code> sont les attributs de jointure respectifs et on
+note <span class="math notranslate nohighlight">\(h\)</span>  la
+fonction de hachage qui s’applique à la valeur de <code class="docutils literal notranslate"><span class="pre">a</span></code>
+ou <code class="docutils literal notranslate"><span class="pre">b</span></code> et renvoie un entier compris entre 1 et <span class="math notranslate nohighlight">\(k\)</span>.</p>
+<p>Un enregistrement  <span class="math notranslate nohighlight">\(r\)</span> de <span class="math notranslate nohighlight">\(R\)</span> est donc
+placé dans le fragment  <span class="math notranslate nohighlight">\(F_R^{h(r.a)}\)</span>;
+un enregistrement  <span class="math notranslate nohighlight">\(s\)</span> de <span class="math notranslate nohighlight">\(S\)</span> est donc
+placé dans le fragment  <span class="math notranslate nohighlight">\(F_S^{h(s.b)}\)</span>. On obtient
+exactement le même nombre de fragments pour <span class="math notranslate nohighlight">\(R\)</span> et <span class="math notranslate nohighlight">\(S\)</span>,
+placés sur le disque si nécessaire, comme le montre la figure <a class="reference internal" href="#hashjoin"><span class="std std-ref">Première phase de la jointure par hachage: le partitionnement</span></a>.</p>
+<figure class="align-center" id="id18">
+<span id="hashjoin"></span><a class="reference internal image-reference" href="_images/hashjoin.png"><img alt="_images/hashjoin.png" src="_images/hashjoin.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.15 </span><span class="caption-text">Première phase de la jointure par hachage: le partitionnement</span><a class="headerlink" href="#id18" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Comment est choisi <span class="math notranslate nohighlight">\(k\)</span>, le nombre de fragments?
+<em>Le critère que, pour la plus petite des deux tables, chaque fragment
+doit tenir dans la mémoire disponible</em>. Si, par exemple, <span class="math notranslate nohighlight">\(R\)</span>
+est la plus petite des deux tables et occupe 100 blocs, alors
+que 20 blocs de RAM sont disponibles, il faudra au moins
+<span class="math notranslate nohighlight">\(k=5\)</span> fragments. Pourquoi? Lire la suite.</p>
+</div>
+<p>On peut alors passer à la seconde phase, dite de jointure.
+La remarque fondamentale ici est la suivante: si deux nuplets  <span class="math notranslate nohighlight">\(r\)</span>  et  <span class="math notranslate nohighlight">\(s\)</span>
+doivent être joints, alors on a  <span class="math notranslate nohighlight">\(h(r.a) = h(s.b)=u\)</span>
+et on les trouvera, respectivement, dans  <span class="math notranslate nohighlight">\(F_R^u\)</span>
+et <span class="math notranslate nohighlight">\(F_S^u\)</span>. <em>En d’autres termes, il suffit d’effectuer
+la jointure sur les paires de fragments correspondant à la même valeur
+de la fonction de hachage.</em></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Le paragraphe qui précède est vraiment le cœur de l’algorithme
+de hachage et justifie tout sont fonctionnement. Lisez-le et relisez-le
+jusqu’à être convaincus que vous le comprennez.</p>
+</div>
+<p>La deuxième phase consiste alors pour <span class="math notranslate nohighlight">\(i = 1, ..., k\)</span>,
+à lire le fragment  <span class="math notranslate nohighlight">\(F_R^i\)</span> de
+<span class="math notranslate nohighlight">\(R\)</span> en mémoire et à effectuer la jointure avec le
+fragment <span class="math notranslate nohighlight">\(F_S^i\)</span> de <span class="math notranslate nohighlight">\(S\)</span>. La technique de jointure à appliquer
+au fragment est exactement celle par boucle imbriquées, décrite ci-dessus,
+quand l’une
+des deux tables tient en RAM: . Le point important
+(et qui explique le choix du nombre de fragments)
+est qu’au moins l’un des deux fragments à joindre doit résider en mémoire;
+l’autre, lu séquentiellement, peut avoir une taille quelconque.</p>
+<p>La  <a class="reference internal" href="#hashjoin2"><span class="std std-numref">Fig. 6.16</span></a> montre le calcul de la jointure pour deux fragments.
+Celui de la première table est entièrement en mémoire, celui de la seconde
+est lu séquentiellement et placé au fur et à mesure de la lecture
+dans le reste de la mémoire disponible, pour être joint avec le fragment résidant.</p>
+<figure class="align-center" id="id19">
+<span id="hashjoin2"></span><a class="reference internal image-reference" href="_images/hashjoin2.png"><img alt="_images/hashjoin2.png" src="_images/hashjoin2.png" style="width: 50%;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 6.16 </span><span class="caption-text">Première phase de la jointure par hachage: la jointure</span><a class="headerlink" href="#id19" title="Lien permanent vers cette image">¶</a></p>
+</figcaption>
+</figure>
+<p>Le coût de la première phase de partitionnement de cet algorithme est
+<span class="math notranslate nohighlight">\(2 \times (B_R + B_S)\)</span>.  Chaque relation est lue entièrement et hachée  dans
+les fragments qui sont écrits sur disque bloc par bloc.</p>
+<p>Le coût de la deuxième phase est de <span class="math notranslate nohighlight">\(B_R + B_S\)</span>. En effet les
+relations partitionnées sont lues une fois chacune, fragment par fragment.
+Le coût total de cet algorithme est donc  <span class="math notranslate nohighlight">\(3 \times (B_R + B_S)\)</span>.
+Noter que cet algorithme est très gourmand en mémoire.  Il
+est  bien adapté aux jointures déséquilibrées pour lesquelles une
+des tables est petite par rapport à lamémoire RAM disponible. Dans le meilleur des cas où un seul
+fragment est nécessaire (la table tient entièrement en mémoire) on
+retrouve tout simplement la jointure par boucles imbriquées décrite
+précédemment. La jointure par hachage peut être vue comme une généralisation
+de cet algorithme simple.</p>
+<p>Comment implanter cet algorithme de jointure sous forme d’itérateur? Et bien,
+comme pour le tri, toute la phase de hachage s’effectue dans le <code class="docutils literal notranslate"><span class="pre">open()</span></code>
+et cet opérateur est donc <em>bloquant</em>: la phase de hachage correspond
+à une latence perçue par l’utilisateur qui attend sans que rien (en
+apparence) ne se passe. La phase de jointure peut, elle, être très rapide,
+et surtout fournit régulièrement des nuplets à l’application cliente.</p>
+<p>Concluons cette section avec deux remarques:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Excepté les algorithmes basés sur une
+boucle imbriquée avec ou sans index, les algorithmes montrés ont été
+conçus pour le prédicat d’égalité.  Naturellement, indépendamment de
+l’algorithme, le nombre des enregistrements du résultat est vraisemblablement
+beaucoup plus important pour de telles jointures que dans le cas d’égalité.</p></li>
+<li><p>Cette section a montré que l’éventail des algorithmes de
+jointure est très large et que le choix d’une méthode efficace n’est
+pas simple. Il dépend notamment de la taille des relations, des
+méthodes d’accès disponibles et de la taille disponible en mémoire
+centrale. Ce choix est cependant fondamental parce qu’il a un impact
+considérable sur les performances. La différence entre deux
+algorithmes peut dans certains cas atteindre plusieurs ordres de grandeur.</p></li>
+</ul>
+</div></blockquote>
+<p>La tendance est à l’utilisation de plus en plus fréquente de la joiunture
+par hachage qui remplace l’algorithme de tri-fusion qui était privilégié
+dans les premiers temps des SGBD relationnels. La taille atteinte par
+les mémoires RAM est sans doute le principal facteur explicatif de ce phénomène.</p>
+</section>
+<section id="id3">
+<h3>Quiz<a class="headerlink" href="#id3" title="Lien permanent vers ce titre">¶</a></h3>
+<blockquote>
+<div><ul>
+<li><p>Pourquoi la clé primaire d’une table doit-elle être indexée (plusieurs réponses possibles) :</p>
+<div class="reauthoring_embedded_quiz" id="defO1"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce que la plupart des requêtes SQL portent sur la valeur de la clé primaire.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Pour vérifier rapidement la contrainte d’unicité lors d’une insertion.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Pour vérifier rapidement la contrainte d’intégrité référentielle lors de l’insertion d’un clé étrangère.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Pour vérifier rapidement la contrainte d’intégrité référentielle lors de la destruction d’une clé primaire.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Considérons les tables des employés et des départements suivantes. Les clés primaires sont indexées.</p></li>
+</ul>
+<blockquote>
+<div><table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Enum</p></th>
+<th class="head"><p>Nom</p></th>
+<th class="head"><p>Dnum</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>E1</p></td>
+<td><p>Benjamin</p></td>
+<td><p>D1</p></td>
+</tr>
+<tr class="row-odd"><td><p>E2</p></td>
+<td><p>Philippe</p></td>
+<td><p>D2</p></td>
+</tr>
+<tr class="row-even"><td><p>E3</p></td>
+<td><p>Serge</p></td>
+<td><p>D1</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</div></blockquote>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<blockquote>
+<div><blockquote>
+<div><table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Dnum</p></th>
+<th class="head"><p>Dnom</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>D1</p></td>
+<td><p>INRIA</p></td>
+</tr>
+<tr class="row-odd"><td><p>D2</p></td>
+<td><p>CNAM</p></td>
+</tr>
+</tbody>
+</table>
+<p>Pour une jointure avec index, combien de parcours d’index doit-on effectuer ?</p>
+<div class="reauthoring_embedded_quiz" id="defO2"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 1</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 2</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 3</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+<ul>
+<li><p>Supposons que l’attribut <code class="docutils literal notranslate"><span class="pre">Dnum</span></code>  dans la table <code class="docutils literal notranslate"><span class="pre">Employé</span></code> soit indexé. Combien de parcours d’index devrait-on
+effectuer en prenant la table <code class="docutils literal notranslate"><span class="pre">Dept</span></code> comme table directrice (à gauche).</p>
+<div class="reauthoring_embedded_quiz" id="defO3"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 1</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> 2</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> 3</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Dans la requête suivante, peut-on appliquer la jointure par boucles imbriquées indexées,
+<em>f()</em> et <em>g()</em> étant des fonctions quelconques ?</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">Emp</span><span class="p">,</span> <span class="n">Dept</span> <span class="k">where</span> <span class="n">f</span><span class="p">(</span><span class="n">E</span><span class="p">.</span><span class="n">dnum</span><span class="p">)</span> <span class="o">=</span> <span class="k">g</span><span class="p">(</span><span class="n">Dept</span><span class="p">.</span><span class="n">dnum</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="reauthoring_embedded_quiz" id="defO4"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Soit la jointure entre deux tables T(ABCD) et S(MNO) dans la requête suivante :</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">T</span><span class="p">,</span> <span class="n">S</span> <span class="k">where</span> <span class="n">T</span><span class="p">.</span><span class="n">A</span><span class="o">=</span><span class="n">S</span><span class="p">.</span><span class="n">M</span>
+</pre></div>
+</div>
+<p>À quels attributs faut-il appliquer la fonction de hachage pour la jointure ?</p>
+<div class="reauthoring_embedded_quiz" id="defO5"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Aux clés primaires.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Aux attributs A de T et M de S.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> À l’attribut A de T, et à la clé primaire de S.</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> À la clé primaire de T, à l’attribut M de S.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Pourquoi 2 nuplets à joindre sont-ils forcément dans des fragments associés ?</p>
+<div class="reauthoring_embedded_quiz" id="defO6"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Parce que les fragments sont de taille proportionnelle à la table, ce qui garantit l’alignement des nuplets à joindre.</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Parce que les valeurs des attributs de jointure étant les mêmes, le résultat de la fonction de hachage est le même.</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></li>
+<li><p>Peut-on appliquer la jointure par hachage à la requête suivante :</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">T</span><span class="p">,</span> <span class="n">S</span> <span class="k">where</span> <span class="n">T</span><span class="p">.</span><span class="n">A</span> <span class="o">&lt;=</span> <span class="n">S</span><span class="p">.</span><span class="n">M</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<blockquote>
+<div><div class="reauthoring_embedded_quiz" id="defO7"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> Oui</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img>  Non</p></li>
+</ol>
+</form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
+</div></blockquote>
+</section>
+</section>
+<section id="exercices">
+<h2>Exercices<a class="headerlink" href="#exercices" title="Lien permanent vers ce titre">¶</a></h2>
+<div class="admonition-exercice-ex-iter1-definition-d-iterateurs admonition" id="ex-iter1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-iter1">ex-iter1</a>: définition d’itérateurs</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Définir sous forme de pseudo-code (<code class="docutils literal notranslate"><span class="pre">open()</span></code>  et <code class="docutils literal notranslate"><span class="pre">next()</span></code>)  un itérateur <code class="docutils literal notranslate"><span class="pre">min</span></code> qui renvoie le nuplet
+de sa source ayant la valeur minimale pour un attribut <code class="docutils literal notranslate"><span class="pre">att_min</span></code>.</p></li>
+<li><p>Définir un itérateur <code class="docutils literal notranslate"><span class="pre">distinct</span></code> qui élimine les doublons de sa source.</p></li>
+</ul>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-iter2-plans-d-execution admonition" id="ex-iter2">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-iter2">ex-iter2</a>: plans d’exécution</p>
+<blockquote>
+<div><p>Donner des plans d’exécution pour les requêtes suivantes:</p>
+<ul>
+<li><p>Avec clause <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">by</span></code></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">titre</span> <span class="k">from</span> <span class="n">Film</span> <span class="k">order</span> <span class="k">by</span> <span class="n">annee</span>
+</pre></div>
+</div>
+</li>
+<li><p>Recherche d’un élément minimal</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="k">min</span><span class="p">(</span><span class="n">annee</span><span class="p">)</span> <span class="k">from</span> <span class="n">Film</span>
+</pre></div>
+</div>
+</li>
+<li><p>Elimination des doublons</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="k">distinct</span> <span class="n">genre</span> <span class="k">from</span> <span class="n">Film</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-opalgo1-comprendre-le-tri-externe admonition" id="ex-opalgo1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-opalgo1">ex-opalgo1</a>: comprendre le tri externe</p>
+<blockquote>
+<div><p>Soit un fichier de 10 000 blocs et une mémoire cache
+de 3 blocs. On trie ce fichier avec l’algorithme de tri-fusion.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Combien de fragments sont produits pendant la première passe?</p></li>
+<li><p>Combien d’étapes de fusion faut-il pour trier complètement le fichier?</p></li>
+<li><p>Quel est le coût total en entrées/sorties?</p></li>
+<li><p>Combien faut-il de blocs en mémoire faut-il pour trier le fichier
+en une fusion    seulement.</p></li>
+<li><p>Répondre aux mêmes questions en prenant un fichier de 20 000
+blocs et 5 blocs de mémoire <em>cache</em>.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-join1-cout-des-jointures-par-boucles-imbriquees admonition" id="ex-join1">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-join1">ex-join1</a>: coût des jointures par boucles imbriquées</p>
+<blockquote>
+<div><p>Soit deux relations <em>R</em> et <em>S</em>, de tailles respectives <em>|R|</em> et <em>|S|</em>
+(en nombre de blocs). On dispose d’une mémoire <em>mem</em> de taille <em>M</em>,
+dont les blocs sont dénotés <span class="math notranslate nohighlight">\(mem[1], mem[2], \ldots, mem[M]\)</span>.</p>
+<blockquote>
+<div><ul>
+<li><p>Donnez la formule exprimant le coût d’une jointure
+<span class="math notranslate nohighlight">\(R \Join S\)</span>, en nombre d’entrées/sorties, pour l’algorithme suivant:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">$posR</span> <span class="o">=</span> <span class="m">1</span>   <span class="c1"># On se place au début de R</span>
+<span class="k">while</span> <span class="o">[</span><span class="nv">$posR</span> &lt;<span class="o">=</span> <span class="p">|</span>R<span class="p">|</span><span class="o">]</span> <span class="k">do</span>
+    Lire  R<span class="o">[</span><span class="nv">$posR</span><span class="o">]</span> dans <span class="nv">$mem</span><span class="o">[</span><span class="m">1</span><span class="o">]</span> <span class="c1"># On lit les blocs 1 par 1</span>
+    <span class="nv">$posS</span> <span class="o">=</span> <span class="m">1</span>  <span class="c1"># On se place au début de S</span>
+    <span class="k">while</span> <span class="o">(</span><span class="nv">$posS</span> &lt;<span class="o">=</span> <span class="p">|</span>S<span class="p">|</span><span class="o">)</span>  <span class="k">do</span>
+       Lire  S<span class="o">[</span><span class="nv">$posS</span><span class="o">]</span> dans <span class="nv">$mem</span><span class="o">[</span><span class="m">2</span><span class="o">]</span> <span class="c1"># On lit les blocs 1 par 1</span>
+       <span class="c1"># JoinList est l&#39;algorithme donné en cours</span>
+       JoinList <span class="o">(</span>mem<span class="o">[</span><span class="m">1</span><span class="o">]</span>, mem<span class="o">[</span><span class="m">2</span><span class="o">])</span>
+      <span class="nv">$posS</span> <span class="o">=</span> <span class="nv">$posS</span> + <span class="m">1</span> <span class="c1"># Bloc suivant de S</span>
+    <span class="k">done</span>
+   <span class="nv">$posR</span> <span class="o">=</span> <span class="nv">$posR</span> + <span class="m">1</span> <span class="c1"># Bloc suivant de R</span>
+ <span class="k">done</span>
+</pre></div>
+</div>
+</li>
+<li><p>Même question avec l’algorithme suivant</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">$posR</span> <span class="o">=</span> <span class="m">1</span>   <span class="c1"># On se place au début de R</span>
+<span class="k">while</span> <span class="o">[</span><span class="nv">$posR</span> &lt;<span class="o">=</span> <span class="p">|</span>R<span class="p">|</span><span class="o">]</span> <span class="k">do</span>
+   Lire  R<span class="o">[</span>p<span class="nv">$osR</span>..<span class="o">(</span><span class="nv">$posR</span>+M-1<span class="o">)]</span> dans <span class="nv">$mem</span><span class="o">[</span><span class="m">1</span>..M-1<span class="o">]</span> <span class="c1"># On lit M-1 blocs de R</span>
+   <span class="nv">$posS</span> <span class="o">=</span> <span class="m">1</span>
+   <span class="k">while</span> <span class="o">(</span><span class="nv">$posS</span> &lt;<span class="o">=</span> <span class="p">|</span>S<span class="p">|</span><span class="o">)</span> <span class="k">do</span>
+       Lire  S<span class="o">[</span><span class="nv">$posS</span><span class="o">]</span> dans <span class="nv">$mem</span><span class="o">[</span>M<span class="o">]</span> <span class="c1"># On lit les blocs 1 par 1</span>
+       <span class="c1"># JoinList est l&#39;algorithme donné en cours</span>
+      JoinList <span class="o">(</span>mem<span class="o">[</span><span class="m">1</span>..M-1<span class="o">]</span>, mem<span class="o">[</span>M<span class="o">])</span>
+      <span class="nv">$posS</span> <span class="o">=</span> <span class="nv">$posS</span> + <span class="m">1</span> <span class="c1"># Bloc suivant de S</span>
+  <span class="k">done</span>
+  <span class="nv">$posR</span> <span class="o">=</span> <span class="nv">$posR</span> + M - <span class="m">1</span> <span class="c1"># On lit les M - 1 blocs suivants de R</span>
+ <span class="k">done</span>
+</pre></div>
+</div>
+</li>
+<li><p>Quelle table faut-il prendre pour la boucle extérieure? La plus petite
+ou la plus grande,?</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+<div class="admonition-exercice-ex-joincost-cout-des-jointures admonition" id="ex-joincost">
+<p class="admonition-title">Exercice <a class="reference internal" href="#ex-joincost">ex-joincost</a>:  coût des jointures</p>
+<blockquote>
+<div><p>On suppose que  <span class="math notranslate nohighlight">\(|R| = 10\,000\)</span> blocs, <span class="math notranslate nohighlight">\(|S|=1\,000\)</span>
+et <em>M=51</em>. On a  10 enregistrements par bloc, <code class="docutils literal notranslate"><span class="pre">b</span></code> est la clé
+primaire de <em>S</em> et on suppose que pour chaque valeur de <code class="docutils literal notranslate"><span class="pre">R.a</span></code>
+on trouve en moyenne 5 enregistrements dans <em>R</em>. On veut
+calculer <span class="math notranslate nohighlight">\(\pi_{R.c} (R \Join_{a=b} S)\)</span>.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Donnez le nombre d’entrée-sorties <em>dans le pire des cas</em> pour les
+algorithmes par boucles imbriquées de l’exercice <a class="reference internal" href="#ex-join1">ex-join1</a>.</p></li>
+<li><p>Même question en supposant (a) qu’on a un index sur <em>R.a</em>,
+(b) qu’on a un index sur <em>S.b</em>, (c) qu’on a deux index,
+sachant que dans tous les cas  l’index a 3 niveaux.</p></li>
+<li><p>Même question pour une jointure par hachage.</p></li>
+<li><p>Même question avec un algorithme de tri-fusion.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+        </div>
+        <div class="sidebar">
+            <div>        
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Licence Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a><br /><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title">
+  Ce cours</span> de <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.bdpedia.fr" property="cc:attributionName" rel="cc:attributionURL">Philippe Rigaux</a> est mis à disposition selon les termes de la <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">licence Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International</a>.
+</div>
+        <hr/>
+          <h3>Table Of Contents</h3>
+          <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">1. Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stock.html">2. Dispositifs de stockage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbreb.html">3. Structures d’index: l’arbre B</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hachage.html">4. Structures d’index: le hachage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moteurs.html">5. Moteurs de stockage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">6. Opérateurs et algorithmes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#s1-modele-d-execution-les-iterateurs">S1: Modèle d’exécution: les itérateurs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#materialisation-et-pipelinage">Matérialisation et pipelinage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#operateurs-bloquants">Opérateurs bloquants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iterateurs">Itérateurs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quiz">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s2-les-operateurs-de-base">S2: les opérateurs de base</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#parcours-sequentiel">Parcours séquentiel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#parcours-d-index">Parcours d’index</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#acces-par-adresse">Accès par adresse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#operateurs-de-selection-et-de-projection">Opérateurs de sélection et de projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#execution-de-requetes-mono-tables">Exécution de requêtes mono-tables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s3-le-tri-externe">S3: Le tri externe</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#phase-de-tri">Phase de tri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-de-fusion">Phase de fusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cout-du-tri-fusion">Coût du tri-fusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#l-operateur-de-tri-fusion">L’opérateur de tri-fusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#s4-algorithmes-de-jointure">S4: Algorithmes de jointure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#jointure-avec-un-index">Jointure avec un index</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jointure-avec-deux-index">Jointure avec deux index</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jointure-par-boucles-imbriquees">Jointure par boucles imbriquées</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jointure-par-tri-fusion">Jointure par tri-fusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jointure-par-hachage">Jointure par hachage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Quiz</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exercices">Exercices</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="optim.html">7. Evaluation et optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tp-optim.html">8. Travaux pratiques: optimisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transactions.html">9. Transactions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conc.html">10. Contrôle de concurrence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rp.html">11. Reprise sur panne</a></li>
+<li class="toctree-l1"><a class="reference internal" href="annales.html">12. Annales des examens</a></li>
+</ul>
+
+          <h3 style="margin-top: 1.5em;">Recherche</h3>
+          <form class="search" action="search.html" method="get">
+            <input type="text" name="q" />
+            <input type="submit" value="Go" />
+            <input type="hidden" name="check_keywords" value="yes" />
+            <input type="hidden" name="area" value="default" />
+          </form>
+          <p class="searchtip" style="font-size: 90%">
+      Saisissez un ou plusieurs mots-clés.
+          </p>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+    
+    
+
+    <div class="footer-wrapper">
+      <div class="footer">
+        <div class="left">
+          <a href="moteurs.html" title="5. Moteurs de stockage"
+             >précédent</a> |
+          <a href="optim.html" title="7. Evaluation et optimisation"
+             >suivant</a> |
+          <a href="genindex.html" title="Index général"
+             >index</a>
+        </div>
+
+        <div class="right">
+        <a href="index.html">&lt;span class=&#34;section-number&#34;&gt;6. &lt;/span&gt;Opérateurs et algorithmes</a><br/>
+          
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2002-2024, Philippe Rigaux.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.0.1.
+    </div>
+        </div>
+        <div class="clearer"></div>
+      </div>
+    </div>
+
+  </body>
+</html>
