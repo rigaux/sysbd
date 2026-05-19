@@ -65,36 +65,31 @@ acteurs/actrices ou réalisateur/réalisatrice; Film contient des films, chaque 
 réalisateur/réalisatrice; enfin la table Rôle indique quels acteurs ont tourné dans quels films.
 Ce sont les tables qui ont servi de support aux exemples du cours.</p>
 <p>Voici leur schéma:</p>
-<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Artiste</span> <span class="p">(</span>
-   <span class="n">id</span> <span class="nb">integer</span><span class="p">,</span>
-  <span class="n">nom</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
-  <span class="n">prenom</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
-  <span class="n">annee_naissance</span> <span class="nb">integer</span><span class="p">,</span>
-  <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id</span><span class="p">)</span>
-  <span class="p">)</span>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Artiste</span>  <span class="p">(</span><span class="n">idArtiste</span> <span class="nb">integer</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+                 <span class="n">nom</span> <span class="nb">varchar</span> <span class="p">(</span><span class="mi">30</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+                 <span class="n">prénom</span> <span class="nb">varchar</span> <span class="p">(</span><span class="mi">30</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+                 <span class="n">annéeNaiss</span> <span class="nb">integer</span><span class="p">,</span>
+                 <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">idArtiste</span><span class="p">),</span>
+                 <span class="k">UNIQUE</span> <span class="p">(</span><span class="n">nom</span><span class="p">,</span> <span class="n">prénom</span><span class="p">));</span>
 
-  <span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">Film</span> <span class="p">(</span>
-        <span class="n">id</span> <span class="nb">integer</span><span class="p">,</span>
-        <span class="n">titre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span>
-        <span class="n">annee</span> <span class="nb">integer</span>
-        <span class="n">id_realisateur</span> <span class="nb">integer</span><span class="p">,</span>
-        <span class="n">genre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
-        <span class="n">resume</span> <span class="nb">text</span><span class="p">,</span>
-        <span class="n">code_pays</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span>
-        <span class="k">version</span> <span class="nb">integer</span><span class="p">,</span>
-        <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id</span><span class="p">),</span>
-        <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_realisateur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
-        <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">code_pays</span><span class="p">)</span> <span class="k">references</span> <span class="n">Pays</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
-        <span class="p">)</span>
+<span class="k">create</span> <span class="k">table</span> <span class="n">Film</span>  <span class="p">(</span><span class="n">idFilm</span> <span class="nb">integer</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+              <span class="n">titre</span>    <span class="nb">varchar</span> <span class="p">(</span><span class="mi">80</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+              <span class="n">année</span>    <span class="nb">integer</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+              <span class="n">idRéalisateur</span>    <span class="nb">integer</span><span class="p">,</span>
+              <span class="n">genre</span> <span class="nb">varchar</span> <span class="p">(</span><span class="mi">20</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+              <span class="cm">/* Remplacer TEXT par LONG pour ORACLE */</span>
+              <span class="n">résumé</span>      <span class="nb">TEXT</span><span class="p">,</span>
+              <span class="n">codePays</span>    <span class="nb">varchar</span> <span class="p">(</span><span class="mi">4</span><span class="p">),</span>
+              <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">idFilm</span><span class="p">),</span>
+              <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">idRéalisateur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">idArtiste</span><span class="p">),</span>
+              <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">codePays</span><span class="p">)</span> <span class="k">references</span> <span class="n">Pays</span><span class="p">(</span><span class="n">code</span><span class="p">));</span>
 
-        <span class="k">CREATE</span> <span class="k">TABLE</span> <span class="k">Role</span> <span class="p">(</span>
-           <span class="n">id_film</span> <span class="nb">integer</span><span class="p">,</span>
-           <span class="n">id_acteur</span> <span class="nb">integer</span><span class="p">,</span>
-           <span class="n">nom_role</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">60</span><span class="p">),</span>
-           <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_film</span><span class="p">,</span> <span class="n">id_acteur</span><span class="p">)</span> <span class="p">,</span>
-           <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_film</span><span class="p">)</span> <span class="k">references</span> <span class="n">Film</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
-           <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">id_acteur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
-        <span class="p">)</span>
+ <span class="k">create</span> <span class="k">table</span> <span class="n">Rôle</span> <span class="p">(</span><span class="n">idFilm</span>  <span class="nb">integer</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+            <span class="n">idActeur</span> <span class="nb">integer</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+             <span class="n">nomRôle</span>  <span class="nb">varchar</span><span class="p">(</span><span class="mi">255</span><span class="p">),</span>
+             <span class="k">primary</span> <span class="k">key</span> <span class="p">(</span><span class="n">idActeur</span><span class="p">,</span><span class="n">idFilm</span><span class="p">),</span>
+             <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">idFilm</span><span class="p">)</span> <span class="k">references</span> <span class="n">Film</span><span class="p">(</span><span class="n">idFilm</span><span class="p">),</span>
+             <span class="k">foreign</span> <span class="k">key</span> <span class="p">(</span><span class="n">idActeur</span><span class="p">)</span> <span class="k">references</span> <span class="n">Artiste</span><span class="p">(</span><span class="n">idArtiste</span><span class="p">));</span>
 </pre></div>
 </div>
 <p>Sur ce schéma, trois bases ont été créées.</p>
@@ -263,14 +258,14 @@ les requêtes B, C, D et E ci-dessus?</p>
 <p>Voici un ensemble de requêtes. Indiquez celles pour lesquelles il est possible d’utiliser
 un index. Rappelons que toutes les clés primaires sont indexées par un arbre B, que la
 clé primaire de Film est l’attribut id, et que la clé primaire de Rôle est la paire
-(id_film, id_acteur).</p>
+(idActeur, idFilm).</p>
 <blockquote>
 <div><div class="reauthoring_embedded_quiz" id="tpoptim12"><form class="reauthoring_embedded_quiz_questions"><ol class="upperalpha eqt-answer-list simple">
 <li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Film where titre=”Alien”</p></li>
-<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Film where id_realisateur=65</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Film where idRéalisateur=65</p></li>
 <li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Film where id=34</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Role where id_film=34 and id_acteur=65</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Role where id_film=34</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select * from Role where idFilm=34 and =65</p></li>
+<li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select * from Role where idFilm=34</p></li>
 </ol>
 </form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
 <p>Nous allons pouvoir le vérifier avec Postgres.
@@ -299,11 +294,11 @@ la base Magnus. Que constate-t-on ?</p>
 <div><div class="reauthoring_embedded_quiz" id="tpoptim14"><form class="reauthoring_embedded_quiz_questions"><p>Quelles sont les requêtes pour trouver le titre des films réalisés par Stanley Kubrick?</p>
 <ol class="upperalpha eqt-answer-list simple">
 <li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film as f, Artiste as a where nom=”Kubrick”</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f, Artiste as a where id_realisateur = a.id and nom=”Kubrick”</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f, Artiste as a where idRéalisateur = a.id and nom=”Kubrick”</p></li>
 <li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> select titre from Film as f, Artiste as a where f.id = a.id and nom=”Kubrick”</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where id_realisateur in (select id from Artiste where nom=”Kubrick”)</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where exists (select * from Artiste where id=id_realisateur and nom=”Kubrick”)</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f join Artiste as a on (f.id_realisateur=a.id) where nom=”Kubrick”</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where idRéalisateur in (select id from Artiste where nom=”Kubrick”)</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film where exists (select * from Artiste where id=idRéalisateur and nom=”Kubrick”)</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> select titre from Film as f join Artiste as a on (f.idRéalisateur=a.id) where nom=”Kubrick”</p></li>
 </ol>
 </form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
 <p>Copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et l’exécuter.
@@ -349,7 +344,7 @@ mais sans sélection sur le nom du réalisateur (donc, sans spécifier le critè
 <ol class="upperalpha eqt-answer-list simple">
 <li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’identifiant id de la table film</p></li>
 <li><p><input type="radio" name="question" value="I" />  <img class="result_icon" style="display: none;"       src="_static/Incorrect_20x20.png"></img> L’identifiant id de la table artiste</p></li>
-<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le champ id_realisateur de la table film</p></li>
+<li><p><input type="radio" name="question" value="C" />  <img class="result_icon" style="display: none;"       src="_static/Correct_20x20.png"></img> Le champ idRéalisateur de la table film</p></li>
 </ol>
 </form><div class="reauthoring_embedded_quiz_buttons"><input class="reauthoring_quiz_button reauthoring-grade"        style="display:none;"        type="button" value="Vérifier" /><input class="reauthoring_quiz_button reauthoring-again"        style="display:none;"        type="button" value="Nouvel essai" /><input class="reauthoring_quiz_button reauthoring-solution"        style="display:none;"        type="button" value="Solution" />  <img class="correct_icon" style="opacity: 0;"       src="_static/Correct_20x20.png"></img>  <img class="incorrect_icon" style="opacity: 0;"       src="_static/Incorrect_20x20.png"></img><span class="reauthoring-embedded-answer"></span></div></div></div></blockquote>
 </section>

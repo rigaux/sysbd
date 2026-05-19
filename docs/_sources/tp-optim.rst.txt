@@ -32,38 +32,33 @@ Voici leur schéma:
 
 .. code-block:: sql
 
-    CREATE TABLE Artiste (
-       id integer,
-      nom varchar(30),
-      prenom varchar(30),
-      annee_naissance integer,
-      primary key (id)
-      )
+      create table Artiste  (idArtiste integer NOT NULL,
+                       nom varchar (30) NOT NULL,
+                       prénom varchar (30) NOT NULL,
+                       annéeNaiss integer,
+                       primary key (idArtiste),
+                       UNIQUE (nom, prénom));
       
-      CREATE TABLE Film (
-            id integer,
-            titre varchar(50),
-            annee integer 
-            id_realisateur integer,
-            genre varchar(30),
-            resume text,
-            code_pays varchar(4),
-            version integer,
-            primary key (id),
-            foreign key (id_realisateur) references Artiste(id),
-            foreign key (code_pays) references Pays(code)
-            )
+      create table Film  (idFilm integer NOT NULL,
+                    titre    varchar (80) NOT NULL,
+                    année    integer NOT NULL,
+                    idRéalisateur    integer,
+                    genre varchar (20) NOT NULL,
+                    /* Remplacer TEXT par LONG pour ORACLE */
+                    résumé      TEXT,
+                    codePays    varchar (4),
+                    primary key (idFilm),
+                    foreign key (idRéalisateur) references Artiste(idArtiste),
+                    foreign key (codePays) references Pays(code));
             
-            CREATE TABLE Role (
-               id_film integer,
-               id_acteur integer,
-               nom_role varchar(60),
-               primary key (id_film, id_acteur) ,
-               foreign key (id_film) references Film(id),
-               foreign key (id_acteur) references Artiste(id)
-            )
+       create table Rôle (idFilm  integer NOT NULL,
+                  idActeur integer NOT NULL,
+                   nomRôle  varchar(255), 
+                   primary key (idActeur,idFilm),
+                   foreign key (idFilm) references Film(idFilm),
+                   foreign key (idActeur) references Artiste(idArtiste));
             
-            
+
 Sur ce schéma, trois bases ont été créées.
 
  - La première, nommée Minus, contient quelques centaines de films et artistes
@@ -268,16 +263,16 @@ Requêtes avec ou sans index
 Voici un ensemble de requêtes. Indiquez celles pour lesquelles il est possible d'utiliser 
 un index. Rappelons que toutes les clés primaires sont indexées par un arbre B, que la 
 clé primaire de Film est l'attribut id, et que la clé primaire de Rôle est la paire 
-(id_film, id_acteur).
+(idActeur, idFilm).
 
 
     .. eqt:: tpoptim12
        
        A) :eqt:`I` select * from Film where titre='Alien'
-       #) :eqt:`I` select * from Film where id_realisateur=65
+       #) :eqt:`I` select * from Film where idRéalisateur=65
        #) :eqt:`C` select * from Film where id=34
-       #) :eqt:`C` select * from Role where id_film=34 and id_acteur=65
-       #) :eqt:`C` select * from Role where id_film=34
+       #) :eqt:`C` select * from Role where idFilm=34 and =65
+       #) :eqt:`I` select * from Role where idFilm=34
 
 Nous allons pouvoir le vérifier avec Postgres.
 Exécutez les requêtes ci-dessus pour consulter le plan d'exécution de Postgres et 
@@ -311,11 +306,11 @@ Algorithmes de jointure
        Quelles sont les requêtes pour trouver le titre des films réalisés par Stanley Kubrick?
 
        A) :eqt:`I` select titre from Film as f, Artiste as a where nom='Kubrick'
-       #) :eqt:`C` select titre from Film as f, Artiste as a where id_realisateur = a.id and nom='Kubrick'
+       #) :eqt:`C` select titre from Film as f, Artiste as a where idRéalisateur = a.id and nom='Kubrick'
        #) :eqt:`I` select titre from Film as f, Artiste as a where f.id = a.id and nom='Kubrick'
-       #) :eqt:`C` select titre from Film where id_realisateur in (select id from Artiste where nom='Kubrick')
-       #) :eqt:`C` select titre from Film where exists (select * from Artiste where id=id_realisateur and nom='Kubrick')
-       #) :eqt:`C` select titre from Film as f join Artiste as a on (f.id_realisateur=a.id) where nom='Kubrick'
+       #) :eqt:`C` select titre from Film where idRéalisateur in (select id from Artiste where nom='Kubrick')
+       #) :eqt:`C` select titre from Film where exists (select * from Artiste where id=idRéalisateur and nom='Kubrick')
+       #) :eqt:`C` select titre from Film as f join Artiste as a on (f.idRéalisateur=a.id) where nom='Kubrick'
 
 Copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et l'exécuter. 
 Vous obtiendrez le résultat dans un onglet et le plan d'exécution du SGBD (PostgreSQL) 
@@ -380,8 +375,4 @@ dans un autre. Puis répondez aux questions qui suivent :
 
        A) :eqt:`I` L'identifiant id de la table film
        #) :eqt:`I` L'identifiant id de la table artiste
-       #) :eqt:`C` Le champ id_realisateur de la table film 
-
-
-
-
+       #) :eqt:`C` Le champ idRéalisateur de la table film 
