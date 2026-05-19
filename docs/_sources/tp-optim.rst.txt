@@ -242,8 +242,20 @@ qui suivent :
 
     .. eqt:: tpoptim12
        
-       L'existence d'un index peut-elle éviter de recourir à un 
-       opérateur bloquant pour les requêtes ci-dessus?
+       L'existence d'un index sur l'année permet-elle
+       d'améliorer le temps de réponse pour
+       les requêtes B, C, D et E ci-dessus?
+
+       
+       A) :eqt:`C` Oui
+       #) :eqt:`I` Non
+       #) :eqt:`I` sans réponse
+
+    .. eqt:: tpoptim13
+       
+       L'existence d'un index sur l'année permet-elle
+       d'améliorer le temps d'exécution pour 
+       les requêtes B, C, D et E ci-dessus?
 
        
        A) :eqt:`I` Oui
