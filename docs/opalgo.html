@@ -1891,6 +1891,70 @@ de sa source ayant la valeur minimale pour un attribut <code class="docutils lit
 <li><p>Définir un itérateur <code class="docutils literal notranslate"><span class="pre">distinct</span></code> qui élimine les doublons de sa source.</p></li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><ul>
+<li><p>L’itérateur <code class="docutils literal notranslate"><span class="pre">Min</span></code> prend comme source
+de données un autre itérateur <code class="docutils literal notranslate"><span class="pre">$source</span></code>.
+Voici la spécification en pseudo-code.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1">#  Initialisation de l&#39;itérateur</span>
+<span class="k">function</span> open
+<span class="o">{</span>
+  <span class="nv">$source</span>.open<span class="o">()</span><span class="p">;</span> <span class="c1"># On exécute le open() sur la source</span>
+  <span class="nv">$courant</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span> <span class="c1"># On récupére le premier nuplet</span>
+  <span class="nv">$valeur_min</span> <span class="o">=</span>  <span class="nv">$courant</span><span class="o">[</span><span class="s1">&#39;att_min&#39;</span><span class="o">]</span> <span class="c1"># Initialisation de la valeur min</span>
+<span class="o">}</span>
+
+<span class="c1"># Le next parcourt tous les enregistrements et conserve le min</span>
+<span class="c1"># (on aurait pu le faire dans l&#39;open)</span>
+<span class="k">function</span> next
+<span class="o">{</span>
+  <span class="nv">$nouveau</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span>
+  <span class="k">if</span> <span class="o">(</span><span class="nv">$nouveau</span> <span class="o">==</span> NULL<span class="o">)</span> <span class="k">then</span> <span class="c1"># On a parcouru toute la source</span>
+     <span class="k">return</span> <span class="nv">$valeur_min</span><span class="p">;</span>
+  <span class="k">fi</span>
+
+  <span class="k">if</span> <span class="o">(</span><span class="nv">$nouveau</span><span class="o">[</span><span class="s1">&#39;att_min&#39;</span><span class="o">]</span> &lt; <span class="nv">$valeur_min</span><span class="o">)</span> <span class="k">then</span>
+        <span class="c1"># On a trouvé une valeur plus petite</span>
+        <span class="nv">$valeur_min</span> <span class="o">=</span> <span class="nv">$nouveau</span><span class="o">[</span><span class="s1">&#39;att_min&#39;</span><span class="o">]</span><span class="p">;</span>
+  <span class="k">fi</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</div></blockquote>
+<ul>
+<li><p>Voici la spécification presque complète du <code class="docutils literal notranslate"><span class="pre">distinct</span></code> en pseudo-code. Quelques
+améliorations à apporter, et notamment la gestion de la fin et de la
+fermeture. Important: ne fonctionne que si la source est triée.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">function</span> open
+<span class="o">{</span>
+  <span class="nv">$source</span>.open<span class="o">()</span><span class="p">;</span>
+  <span class="nv">$courant</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span><span class="p">;</span> <span class="c1"># Premier nuplet</span>
+<span class="o">}</span>
+
+<span class="k">function</span> next
+<span class="o">{</span>
+   <span class="c1">#  On prend le nuplet suivant de la source</span>
+  <span class="nv">$suivant</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span>
+  <span class="c1"># On continue le parcours de la source jusqu&#39;à trouver un nuplet différent</span>
+  <span class="k">while</span> <span class="o">(</span><span class="nv">$suivant</span> <span class="o">==</span> <span class="nv">$courant</span><span class="o">)</span> <span class="k">do</span>
+    <span class="nv">$suivant</span> <span class="o">=</span> <span class="nv">$source</span>.next<span class="o">()</span>
+  <span class="k">done</span>
+
+  <span class="c1"># Ici, on a trouvé un nuplet $suivant qui est différent de $courant</span>
+  <span class="nv">$retour</span> <span class="o">=</span> <span class="nv">$courant</span> <span class="c1"># Le nuplet à renvoyer</span>
+  <span class="nv">$courant</span> <span class="o">=</span> <span class="nv">$suivant</span> <span class="c1"># Le nouveau nuplet courant</span>
+  <span class="k">return</span> <span class="nv">$retour</span>
+ <span class="o">}</span>
+</pre></div>
+</div>
+<p>On peut aussi obtenir l’élimination des doublons avec la hachage.</p>
+</li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-iter2-plans-d-execution admonition" id="ex-iter2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-iter2">ex-iter2</a>: plans d’exécution</p>
@@ -1914,6 +1978,18 @@ de sa source ayant la valeur minimale pour un attribut <code class="docutils lit
 </li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Un itérateur de parcours séquentiel, suivi d’un itérateur
+de tri, suivi d’un itérateur pour la projection.</p></li>
+<li><p>Un itérateur de parcours séquentiel, suivi de notre itérateur
+<code class="docutils literal notranslate"><span class="pre">Min</span></code>, suivi d’un itérateur pour la projection. Autre possibilité:
+on trie, et on ne garde que le premier.</p></li>
+<li><p>Un itérateur de parcours séquentiel, suivi d’un itérateur
+de tri, suivi de notre itérateur <code class="docutils literal notranslate"><span class="pre">distinct</span></code>.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-opalgo1-comprendre-le-tri-externe admonition" id="ex-opalgo1">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-opalgo1">ex-opalgo1</a>: comprendre le tri externe</p>
@@ -1932,6 +2008,26 @@ blocs et 5 blocs de mémoire <em>cache</em>.</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Pour un fichier de 10,000 blocs et 3 blocs de buffer.</p>
+<blockquote>
+<div><ul>
+<li><p>il faut lire <span class="math notranslate nohighlight">\(\lceil \frac{10000}{3} \rceil = 3 334\)</span>
+fois 3 blocs, que l’on trie à chaque fois.</p></li>
+<li><p>ensuite on associe 2 fragments pour en produire un troisième,
+deux fois plus gros. La taille des fragments est de 3, puis
+de 6 après la seconde passe, puis de 12 après la troisième,
+plus généralement de <span class="math notranslate nohighlight">\(3 \times 2^(n-1)\)</span> après l’étape <em>n</em>.</p>
+<p>On cherche <em>n</em> tel que <span class="math notranslate nohighlight">\(3 \times 2^{n-1} \geq 10\,000\)</span>.
+On trouve <span class="math notranslate nohighlight">\(n = \lceil \log (\frac{10000}{3}) \rceil + 1 = 13\)</span>.</p>
+</li>
+<li><p>Nombre d’entrées/sorties: <span class="math notranslate nohighlight">\(2 \times 10\,000 \times n\)</span></p></li>
+<li><p>On veut que <span class="math notranslate nohighlight">\(m \times (m - 1)    \geq 10\,000\)</span>,
+donc <span class="math notranslate nohighlight">\(m = \sqrt{10\,000} = 100\)</span>.</p></li>
+</ul>
+</div></blockquote>
+</div>
 </div>
 <div class="admonition-exercice-ex-join1-cout-des-jointures-par-boucles-imbriquees admonition" id="ex-join1">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-join1">ex-join1</a>: coût des jointures par boucles imbriquées</p>
@@ -1979,6 +2075,23 @@ ou la plus grande,?</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Le premier algorithme est une jointure
+par boucle imbriquée qui exploite très mal la mémoire
+puisque seuls les deux premiers blocs de <em>m</em>
+sont utilisés. Le coût est de <span class="math notranslate nohighlight">\(|R| + |R| \times |S|\)</span>.</p></li>
+<li><p>le second est en fait celui illustré
+par la <a class="reference internal" href="#nestedloop-improved"><span class="std std-numref">Fig. 6.11</span></a>. La mémoire
+<em>m</em> est utilisée pour réduire le nombre d’itérations sur <em>R</em>,
+avec un coût de <span class="math notranslate nohighlight">\(|R| + \lceil \frac{|R|}{M-1} \rceil  \times |S|\)</span>.</p></li>
+<li><p>Au vu des formules de coût il faut prendre la petite table
+comme table directrice. Si cette table tient en mémoire (fréquent),
+le coût  se réduite à <span class="math notranslate nohighlight">\(|R| + |S|\)</span>, soit une unique lecture
+séquentielle de chaque table.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-joincost-cout-des-jointures admonition" id="ex-joincost">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-joincost">ex-joincost</a>:  coût des jointures</p>
@@ -2000,6 +2113,67 @@ sachant que dans tous les cas  l’index a 3 niveaux.</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Premier algorithme: 10 001 000 blocs. Second algorithme
+on lit <em>S</em> (il faut mettre la table la plus petite à l’extérieur
+de la boucle) en 20 fragments, et pour chacun on
+lit <em>R</em>: <span class="math notranslate nohighlight">\(1\,000 + (20 \times 10\,000) = 201\,000\)</span>.</p></li>
+<li><p>Avec un index sur <em>R.a</em>: on parcourt <em>S</em> (1 000
+blocs). <em>S</em> contient 10 000 enregistrements
+donc <em>au pire</em> if faut 30 000 accès  pour parcourir
+l’index de hauteur 3. Pour chaque valeur de <em>S.b</em>
+on trouve en moyenne 5 enregistrement dans <em>R</em>,
+donc 50 000 lectures directes dans <em>R</em>.
+Soit 81 000 lectures.</p>
+<p>Avec un index sur <em>S</em>: on parcourt <em>R</em> (10 000 blocs).
+Au pire il faut 100 000 accès par l’index: 300 000 blocs +
+100 000 accès directs. Soit 500 000 lectures.</p>
+<p>Avec deux index: il faut se ramener au
+cas d’un index sur <em>R</em>.</p>
+<p>Ces coûts sont théoriques. En pratique, les index
+sont le plus souvent déjà en mémoire, ainsi qu’une bonne
+partie des blocs de données. Cela réduit considérablement
+le nombre de lectures physiques (retirer le facteur lié
+au parcours d’index dans les analyses ci-dessus).</p>
+</li>
+<li><p>Par hachage: le mieux est de hacher la table <em>S</em>
+sur <em>S.b</em> en 20  fragments de  50 blocs chacun. On hache ensuite
+<em>R</em>  sur <em>R.a</em>, <em>avec la même fonction de hachage</em>
+en 20 fragments d’environ 500 blocs chacun.</p>
+<p>Ensuite on applique la jointure par boucles imbriquées   sur chaque paire de fragments:
+on lit le fragment de <em>S</em> dans 50 blocs,
+on fait défiler le fragment correspondant de <em>R</em> dans le bloc restant.</p>
+<p>Coût: pour le hachage on lit et on écrit une fois <em>S</em> et <em>R</em>
+(22 000 E/S).  Pour la jointure il suffit de lire une fois
+<em>R</em> et <em>S</em>, soit 33 000 blocs lus ou écrits en tout.</p>
+</li>
+<li><p>Avec un algo. de tri-fusion. On commence par trier
+chaque table:</p>
+<blockquote>
+<div><ul>
+<li><p>la table <span class="math notranslate nohighlight">\(R\)</span> se décompose en 197 (10 000/51)
+fragments triés
+de 51 blocs chacun (sauf le dernier qui fait 4 blocs),;
+on les fusionne en 4 gros fragments: les 3 premiers
+font <span class="math notranslate nohighlight">\(51 \times 50 =  2\,550\)</span> blocs, le dernier fait
+2 350 blocs. Une dernière fusion et le fichier est trié.
+Coût : 60 000 blocs.</p>
+<p>La table <span class="math notranslate nohighlight">\(S\)</span> se trie en une seule phase de fusion: coût
+4 000 blocs.</p>
+<p>Il reste à fusionner les deux tables triées, pour un coût final
+de 11 000 blocs lus. Donc le coût total est de 75 000 blocs.</p>
+<p>Remarque: en pratique certaines astuces permettent d’améliorer
+la performance du tri (notez par exemple que la mémoire
+est très mal utilisée dans la seconde phase de fusion de
+la table <span class="math notranslate nohighlight">\(R\)</span>), ce qui rapproche le coût de celui du hachage.</p>
+</li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div>
 </div>
 </section>
 </section>

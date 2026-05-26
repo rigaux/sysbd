@@ -1140,6 +1140,21 @@ avec l’index. Inversement, identifier celles pour lesquelles l’index est inu
 </pre></div>
 </div>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Accès par index pour <code class="docutils literal notranslate"><span class="pre">id=20</span></code>,
+puis on applique la sélection <code class="docutils literal notranslate"><span class="pre">titre='Vertigo'</span></code>
+au moment où on prend l’enregistrement par
+l’itérateur d’accès direct.</p></li>
+<li><p>Rien ne sert d’utiliser l’index pour <code class="docutils literal notranslate"><span class="pre">id=20</span></code> puisqu’il
+faut de toute façon faire un parcours séquentiel.
+On effecte donc un seul parcours séquentiel pendant lequel
+on teste les deux critères.</p></li>
+<li><p>Il suffit de compter le nombre d’entrées dans l’index.</p></li>
+<li><p>On prend la valeur de l’entrée la plus à droite dans l’index.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-planex2-encore-des-plans-d-execution admonition" id="ex-planex2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-planex2">ex-planex2</a>: encore des plans d’exécution</p>
@@ -1189,6 +1204,21 @@ arborescente ou sous forme d’une expression EXPLAin, et expliquez en détail c
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Oui les deux expressions sont équivalentes. Pour passer de la première
+à la seconde, on applique d’abord la règle de composition
+des sélections, puis la règle de commutativité entre sélection et
+jointure.</p></li>
+<li><p>En principe le second plan est le meilleur car il effectue
+les sélections le plus tôt possible et limite donc la taille
+des tables à joindre.</p></li>
+<li><p>Par boucles imbriquées indexées, avec recherche par l’index
+du journal « le monde », puis recherche du journaliste
+avec l’index et la clé d’accès <code class="docutils literal notranslate"><span class="pre">id_rédacteur</span></code>.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-planex3-toujours-des-plans-d-execution admonition" id="ex-planex3">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-planex3">ex-planex3</a>: toujours des plans d’exécution</p>
@@ -1230,6 +1260,36 @@ Pour chacune des requêtes suivantes, donner le plan d’exécution qui vous sem
 </pre></div>
 </div>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Standard: boucles imbriquées indexées, avec balayage séquentiel
+de la table <code class="docutils literal notranslate"><span class="pre">Licence</span></code> (on en profite pour
+effectuer la sélection sur la durée), et accès par l’index à <code class="docutils literal notranslate"><span class="pre">Société</span></code>.</p></li>
+<li><p>Il faut effectuer deux jointures par boucles imbriquées
+indexées successives. Le parcours séquentiel peut
+s’effectuer sur <code class="docutils literal notranslate"><span class="pre">Licence</span></code> ou <code class="docutils literal notranslate"><span class="pre">Logiciel</span></code>, la plus petite
+des deux.
+Attention on ne peut pas commencer en parcourant séquentiellement
+la table <code class="docutils literal notranslate"><span class="pre">Société</span></code> car l’index sur <code class="docutils literal notranslate"><span class="pre">Licence</span></code> est inutilisable
+dans ce cas.</p></li>
+<li><p>Jointure par  boucle imbriquée indexée sur
+<code class="docutils literal notranslate"><span class="pre">Société</span></code> et <code class="docutils literal notranslate"><span class="pre">Licence</span></code> (avec parcours
+séquentiel sur <code class="docutils literal notranslate"><span class="pre">Licence</span></code>). Pour chaque enregistrement,
+de la jointure, parcours séquentiel de la table <code class="docutils literal notranslate"><span class="pre">Logiciel</span></code>.
+Le système peut commencer par évaluer la sous-requête, et stocker le
+résultat (un nuplet) dans une table temporaire qui est alors
+parcourue répétitivement. Sinon, le résultat risque d’être sous-optimal.</p>
+<p>Leçon: méfiance dans l’utilisation des sous-requêtes
+pour des tables importantes.</p>
+</li>
+<li><p>Encore la même requête, mais cette fois on donne la possibilité
+au système d’utiliser l’index sur <code class="docutils literal notranslate"><span class="pre">Logiciel</span></code>.</p>
+<p>On se ramène à deux boucles imbriquées indexées, mais
+avec un ordre figé, ce qui est à éviter.</p>
+</li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-optim1-plans-d-execution-oracle admonition" id="ex-optim1">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-optim1">ex-optim1</a>:  plans d’exécution Oracle</p>
@@ -1391,6 +1451,48 @@ d’employé), on a le plan d’exécution suivant:</p>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Boucles imbriquées (<code class="docutils literal notranslate"><span class="pre">NESTED</span> <span class="pre">LOOP</span></code>): on choisit de parcourir un
+sous-ensemble de <code class="docutils literal notranslate"><span class="pre">emp</span></code> en utilisant l’index, puis on accède à
+<code class="docutils literal notranslate"><span class="pre">dept</span></code> avec l’index sur <code class="docutils literal notranslate"><span class="pre">deptno</span></code>.</p></li>
+<li><p>Algorithme de SCAN-INDEX. Equivalent à une jointure par NESTED-LOOP
+brutal. On pourrait (i) changer l’ordre des tables sans modifier la
+complexité, et (ii) faire un tri-fusion.</p></li>
+<li><p>Comme l’index sur <code class="docutils literal notranslate"><span class="pre">Emp(deptno)</span></code> n’est pas unique, on
+a intérêt à limiter la liste des adresses en utilisant les deux index
+et en faisant l’intersection. L’algorithme utilisé pour
+cette intersection n’est pas précisé par Oracle: il est possible
+qu’un tri sur les adresses soit nécessaire.</p></li>
+<li><p>Algorithme de tri-fusion classique. On peut créer
+un index sur <code class="docutils literal notranslate"><span class="pre">deptno</span></code> dans l’une ou l’autre table.</p></li>
+<li><p>Création d’une table temporaire (<code class="docutils literal notranslate"><span class="pre">VIEW</span></code>) contenant les numéros
+des départements à Paris. On a éliminé les doublons (<code class="docutils literal notranslate"><span class="pre">SORT</span>
+<span class="pre">UNIQUE</span></code>). Ensuite on fait un tri-fusion. Donc exécution
+différente  pour une requête équivalente.</p></li>
+<li><p>Boucles imbriquées (<code class="docutils literal notranslate"><span class="pre">FILTER</span></code>): on parcourt la table
+<code class="docutils literal notranslate"><span class="pre">Emp</span></code> (ligne 2); our chaque employé, on regarde le salaire
+<em>SAL</em> et le numéro du patron <em>MGR</em> ; on parcourt alors la
+table <code class="docutils literal notranslate"><span class="pre">Emp</span></code> (ligne 3) pour trouver
+l’employé dont le numéro est <em>MGR</em>  et on compare le salaire à <em>SAL</em>.
+Donc c’est une boucle imbriquée brutale: on aurait pu faire un
+tri-fusion.</p></li>
+<li><p>Boucles imbriquées (FILTER) : on parcourt la table EMP (ligne 2).
+Pour chaque employé, le salaire SAL et le numéro EMPNO, valeur
+de l’attribut MGR servent de clé pour accéder à l’index (lignes 4
+et 5). L’intersection des listes de rowid (ligne 3) obtenues par
+les étapes 4 et 5 donne si elle est non vide un rowid de patron
+ayant même salaire que l’employé.</p></li>
+<li><p>Dans ce cas, seul l’index sur les numéros d’employés est utilisé.
+Boucles imbriquées (FILTER); on parcourt la table <code class="docutils literal notranslate"><span class="pre">Emp</span></code>:
+pour chaque employé, l’attribut <em>MGR</em>  donne le numéro
+d’employé de son patron.
+On accède à son patron par l’index sur les numéros d’employé (lignes
+4 puis 3): on vérifie alors si son salaire est égal à celui de
+l’employé.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-optim2-encore-des-plans-d-execution-oracle admonition" id="ex-optim2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-optim2">ex-optim2</a>: encore des plans d’exécution Oracle</p>
@@ -1444,6 +1546,48 @@ arborescente. Expliquez en détail le plan choisi.</p></li>
 </li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Solution: Noms des TGV dont le terminus est Aix et qui sont répertoriés dans la
+table Arret.</p></li>
+<li><p>Solution: Il n’y a pas d’index ni sur la gare terminus ni sur le
+numéro de TGV dans la table TGV. Il n’y a pas d’index sur le
+numéro de TGV dans la table Arret. L’algo de jointure est le
+tri-fusion. On parcourt séquentiellement la table TGV et on
+sélectionne les TGV dont le terminus est Aix, on projette sur le
+numéro de TGV et le nom. On trie sur le numéro de TGV. On lit la
+table Arret, on la projette sur le numéro de TGV et on trie
+sur le numéro de TGV. On fusionne les deux tables triées et on projette
+sur le nom de TGV.</p></li>
+<li><p>Solution: L’index est dense et non unique.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+  1 NESTED LOOPS
+    2 TABLE ACCESS FULL TGV
+    3 INDEX RANGE SCAN ARRET_NUMTGV
+</pre></div>
+</div>
+<p>On parcourt la table TGV et on sélectionne les nuplets (TGV) qui ont pour
+gare terminus “Aix”. Pour chacun d’eux on utilise le numéro de TGV comme clé
+d’accès à l’index sur les numéros de TGV de la table “Arret”. On vérifie en
+traversant l’index de la table “Arret” que le TGV existe. C’est l’algorithme de
+boucles imbriquées en présence d’index, mais observez qu’il n’est pas
+nécessaire d’accéder à la table “Arret” elle-même.</p>
+</li>
+<li><p>Solution:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+  1 NESTED LOOPS
+    2 TABLE ACCESS BY INDEX ROWID TGV
+        3 INDEX RANGE SCAN TGV_GARETERM
+    4 INDEX RANGE SCAN ARRET_NUMTGV
+</pre></div>
+</div>
+<p>C’est presque le même plan, sauf que au lieu de balayer tous les TGV (toute la
+table TGV), on accède directement à ceux dont le terminus
+est “Aix” en traversant l’index sur les gares terminus.</p>
+</li>
+</ul>
+</div>
 </div>
 </section>
 </section>

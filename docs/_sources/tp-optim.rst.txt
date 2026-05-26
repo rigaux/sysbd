@@ -313,9 +313,10 @@ Algorithmes de jointure
        #) :eqt:`C` select titre from Film as f join Artiste as a on (f.idRéalisateur=a.id) where nom='Kubrick'
 
 Copier/coller une des bonnes requêtes dans le formulaire ci-dessous, et l'exécuter. 
-Vous obtiendrez le résultat dans un onglet et le plan d'exécution du SGBD (PostgreSQL) 
-dans un autre. Puis répondez aux questions qui suivent : 
-
+Notez bien qu'on s'intéresse à la requête et à la manière
+dont elle va être exécutée, pas au résultat. Etudiez donc 
+le plan d'exécution du SGBD (PostgreSQL)
+et répondez aux questions qui suivent : 
 
     .. eqt:: tpoptim15
        

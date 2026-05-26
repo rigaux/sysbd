@@ -1842,6 +1842,22 @@ pour chaque enregistrement ?</p></li>
 </ul>
 </div></blockquote>
 <p>Vous pouvez prendre les valeurs du <code class="xref std std-numref docutils literal notranslate"><span class="pre">tbl-memoires</span></code> pour les calculs.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Réponses:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>On compte 100 Mo/s pour le débit d’un disque. Il faut 10s pour 1 Go, donc
+30 s pour lire 3 Go. C’est loin d’être négligeable.</p></li>
+<li><p>L’hypothèse d’une lecture physique aléatoire pour chaque enregistrement est vraiment
+le pire des cas, peu vraisemblable en pratique grâce au <em>cache</em> et à diverses
+techniques d’optimisation des accès. Dans notre fichier il y a <span class="math notranslate nohighlight">\(10^6\)</span>
+enregistrements, et en comptant 10 ms par accés, cela donnerait 10 000 secondes,
+soit près de 3 heures. À comparer au 30 s du parcours séquentiel pour réaliser,
+même si les calculs sont approximatifs, l’intérêt d’un rangement compact.</p></li>
+</ul>
+</div></blockquote>
+</div>
 </div>
 <div class="admonition-exercice-ex-perfdisque-specifications-d-un-disque-magnetique admonition" id="ex-perfdisque">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-perfdisque">ex-perfdisque</a>: Spécifications d’un disque magnétique</p>
@@ -2012,6 +2028,43 @@ significative du <em>hit ratio</em>?</p></li>
 </ul>
 </div></blockquote>
 <p>Prenez l’hypothèse que la stratégie de remplacement est de type LRU.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Pour la première question le <em>hit ratio</em> est évidemment de 0,1: il y a 10%
+de chances pour qu’un bloc soit en mémoire au moment d’une lecture logique.
+Ce n’est pas très bon…</p></li>
+<li><p>Appelons <em>A</em> la partie de la base correspondant  aux 200 Mo les plus lus,
+et <em>B</em> le reste. On remarque tout d’abord que, avec une stratégie LRU, le <em>cache</em> contient
+80% d’enregistrements de <em>A</em>, et 20% d’enregistrements de <em>B</em>.</p>
+<p>Si on fait une lecture d’un enregistrement de <em>A</em>, le <em>hit ratio</em>
+est de <span class="math notranslate nohighlight">\(\frac{80}{200}\)</span>. Pour <em>B</em>, le  <em>hit ratio</em>
+est de <span class="math notranslate nohighlight">\(\frac{20}{800}\)</span>. On pondère ces valeurs par la probabilité
+de demander la lecture, respectivement, d’un enregistrement <em>A</em> ou
+<em>B</em>, soit:</p>
+<div class="math notranslate nohighlight">
+\[0,8 \times   \frac{80}{200} + 0,2 \times \frac{20}{800} = 0,325\]</div>
+<p>Ce qui est déjà mieux de que le 0,1 obtenu à la première question. Il y a
+maintenant une chance sur trois de trouver un bloc dans le <em>cache</em>.
+Le fait que le <em>cache</em> soit beaucoup plus petit que la base ne suffit
+dont pas à prédire un <em>hit ratio</em> très défavorable: tout dépend des accès.</p>
+</li>
+<li><p>Jusqu’où peut-on espérer une amélioration? Notons <em>C</em> la taille
+du <em>cache</em>. La formule qui donne le <em>hit ratio</em> en fonction de <em>C</em> est:</p>
+<div class="math notranslate nohighlight">
+\[0,8 \times   \frac{Min(|A|, 0,8 \times C)}{200} + 0,2 \times \frac{Min(800, 0,2 \times C)}{800}\]</div>
+<p>Le premier terme
+de l’équation bénéficie rapidement d’un accroissement de <em>C</em>,
+jusqu’à <em>C= 250</em>. Tout le fichier <em>A</em> sera alors en mémoire.
+Ensuite, la petite amélioration du <em>hit ratio</em> en fonction de <em>C</em> devient
+beaucoup plus faible.</p>
+<p>On arrive à un <em>hit ratio</em> supérieur à 80%. Moralité: le rapport des tailles
+entre la mémoire RAM et la base est une estimation très grossière  <em>hit ratio</em>.
+Il faut aussi savoir analyser les accès à la base et les <em>hot spots</em>,
+les <em>points chauds</em> constitués des données lues intensément.</p>
+</li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-calculs-fichiers-quelques-calculs admonition" id="ex-calculs-fichiers">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-calculs-fichiers">ex-calculs-fichiers</a>: quelques calculs</p>

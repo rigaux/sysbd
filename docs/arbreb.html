@@ -1434,6 +1434,32 @@ d’un enregistrement par clé unique, avec index et sans index dans le pire des
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Dans un bloc on met <span class="math notranslate nohighlight">\(\lfloor \frac{4096}{45} \rfloor=91\)</span> enregistrements.
+Il faut donc <span class="math notranslate nohighlight">\(\lceil \frac{1000000}{91} \rceil = 10\,990\)</span> blocs, donc 45 Mo.</p></li>
+<li><p>Une entrée d’index fait 40 octets. Donc on  met
+<span class="math notranslate nohighlight">\(\lfloor \frac{4096}{40}\rfloor =102\)</span> entrées par bloc. L’ordre
+de l’arbre est donc 51.</p>
+<p>Il faut indexer 1 000 000 enregistrements pour le  niveau des feuilles, soit
+<span class="math notranslate nohighlight">\(\lceil  \frac{1\,000\,000}{102} \rceil = 9\,804\)</span> blocs. Ensuite il
+faut indexer chacun des 9,804 blocs, soit <span class="math notranslate nohighlight">\(\lceil  \frac{9\,804}{102} \rceil =97\)</span>
+blocs supplémentaires, que pour finir on indexe avec un seul bloc, la racine.</p>
+<p>Donc il faut 9,804 + 97 + 1 blocs pour constituer  l’index.</p>
+</li>
+<li><p>Si la clé n’occupe que 4 octets, une entrée occupe 4+8=12 octets. On met
+<span class="math notranslate nohighlight">\(\lfloor \frac{4096}{12} \rfloor =341\)</span> entrées par bloc. Le niveau
+des feuilles contient <span class="math notranslate nohighlight">\(\lceil \frac{1\,000\,000}{341} \rceil = 2\,933\)</span> blocs,
+le niveau suivant <span class="math notranslate nohighlight">\(\lceil \frac{2\,933}{341} \rceil =9\)</span> blocs, et on les indexe avec la racine.
+On a beaucoup gagné!</p></li>
+<li><p>Recherche avec index: trois lectures dans l’index,
+puis une lecture dans le fichier. Soit 40 ms s’il n’y a que des lectures physiques.</p></li>
+<li><p>Sans index, en moyenne il faut lire la moitié du fichier,
+soit 5 495 blocs, soit plus de 50 secondes s’il n’y a que des lectures physiques
+et des accès aléatoires (ce qui est un cas extrêmement défavorable).</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-arbreb2-hauteur-et-efficacite-d-un-arbre-b admonition" id="ex-arbreb2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb2">ex-arbreb2</a>: hauteur et efficacité d’un arbre B</p>
@@ -1494,6 +1520,23 @@ stocke donc au plus 10 entrées. Quelle est la hauteur minimale de l’arbre et 
 on constate qu’il a deux niveaux. Quel est l’ordre maximal compatible avec cette constatation?
 Et l’ordre minimal?</p>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Hauteur minimale: pour atteindre la minimalité il faut que
+tous les blocs soient pleins, avec 10 entrées. Donc il faut 30 blocs au niveau
+des feuilles, 3 au niveau intermédiaire, et un bloc avec 3 pointeurs pour la racine.
+La hauteur est 2.
+Hauteur maximale: il n’y a que 5 entrées par bloc. Donc il faut 60 blocs feuilles,
+12 blocs au niveau intermédiaire, 3 au dessus, et un pour la racine. La hauteur est 3.</p>
+<p>Si la hauteur est de 1: le nombre d’entrées  au niveau des feuilles
+est <span class="math notranslate nohighlight">\(n^2\)</span>, où <em>n</em> est le nombre d’entrées par bloc.</p>
+<p>Pour que <em>n</em> soit maximal, il faut que ce soit le plus grand entier
+tel que <span class="math notranslate nohighlight">\(n &lt; 300\)</span> (sinon il n’y aurait qu’un seul niveau) et <span class="math notranslate nohighlight">\(n^2 \geq 300\)</span>
+(sinon il y aurait 3 niveaux), soit <span class="math notranslate nohighlight">\(n=299\)</span>, et un ordre égal
+à la moitié, soit 149..</p>
+<p><em>n</em> minimal: le plus petit <em>n</em> tel que <span class="math notranslate nohighlight">\(n^2 \geq 300\)</span>, soit <span class="math notranslate nohighlight">\(n=18\)</span>
+et un ordre égal à 9.</p>
+</div>
 </div>
 <div class="admonition-exercice-ex-arbreb4-indexation-des-sequences admonition" id="ex-arbreb4">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-arbreb4">ex-arbreb4</a>:  indexation des séquences</p>
@@ -1615,6 +1658,25 @@ ou optimiser la  vérification des contraintes <code class="docutils literal not
 </pre></div>
 </div>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>La première requête est optimisée par l’index sur la clé primaire</p></li>
+<li><p>La seconde est une recherche <em>par préfixe</em> sur la clé primaire: idem.</p></li>
+<li><p>La troisième applique une fonction à la clé: l’index ne peut pas être utilisé
+car la critère de recherche n’est plus une valeur de clé</p></li>
+<li><p>La quatrième est une recherche <em>par suffixe</em>: l’index n’est pas utilisable</p></li>
+<li><p>L’insertion tire partie de l’index sur la clé primaire sur <code class="docutils literal notranslate"><span class="pre">S</span></code>: il faut vérifier
+que la valeur de clé n’existe pas déjà. En l’absence d’index il faudrait
+parcourir toute la table à chaque insertion. La clé sur <code class="docutils literal notranslate"><span class="pre">R.idR</span></code>
+est également utile pour vérifier la contrainte d’intégrité.</p></li>
+<li><p>La requête par intervalle peut tirer partie de l’index, si l’intervalle est limité.</p></li>
+<li><p>Enfin la destruction dans <code class="docutils literal notranslate"><span class="pre">R</span></code> implique la vérification qu’il n’existe
+pas de nuplet référençant dans <code class="docutils literal notranslate"><span class="pre">S</span></code>, sinon la contrainte d’intégrité serait violée.
+L’index sur la clé étrangère est ici très utile (en plus bien sûr de l’index
+sur la clé primaire de <code class="docutils literal notranslate"><span class="pre">R</span></code> pour trouver les n-uplets à détruire).</p></li>
+</ul>
+</div>
 </div>
 </section>
 </section>

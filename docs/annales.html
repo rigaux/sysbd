@@ -60,7 +60,13 @@ que chaque bloc contient un entête de 150 octets
 et qu’un enregistrement ne peut pas chevaucher 2 blocs?</p></li>
 </ul>
 <blockquote>
-<div></div></blockquote>
+<div><div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Un bloc contient 8 042 octets utiles. Donc 80 enregistrements
+par bloc au maximum. On divise les 120 000 enregistrements par 80
+et on obtient 1 500 blocs</p>
+</div>
+</div></blockquote>
 <ul class="simple">
 <li><p>On suppose maintenant que <em>F</em> est indexé par un index non dense
 sur <code class="docutils literal notranslate"><span class="pre">A</span></code>  et  un index dense sur un autre champ <code class="docutils literal notranslate"><span class="pre">B</span></code>. On peut
@@ -69,7 +75,14 @@ Combien d’entrées y a-t-il dans les feuilles de l’index non dense?
 dans les feuilles de l’index dense?</p></li>
 </ul>
 <blockquote>
-<div></div></blockquote>
+<div><div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Le fichier <em>F</em> contient 1 500 blocs et et trié sur <code class="docutils literal notranslate"><span class="pre">A</span></code>.
+L’index non dense contient donc 1500 entrées, une par bloc et cet index occupe 15
+blocs. L’index dense
+contient 120000 entrées, une par enregistrement, et occupe 1200 blocs..</p>
+</div>
+</div></blockquote>
 <ul>
 <li><p>Supposons que l’index non dense a deux niveaux, racine
 comprise, et que seule la racine est en mémoire.  On se place dans le pire
@@ -83,13 +96,41 @@ des cas?</p>
 </li>
 </ul>
 <blockquote>
-<div></div></blockquote>
+<div><div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>La recherche utilise  l’index non dense sur <code class="docutils literal notranslate"><span class="pre">A</span></code>. Celui-ci tient sur 15 blocs.
+La traversée de l’index part de la racine et arrive immédiatement à la feuille
+d’index dont la
+première entrée est inférieure ou égale à P1A3 et dont la dernière entrée est
+supérieure ou égale à P1A3. On recherche dans cette feuille l’entrée la plus grande
+inférieure ou égale à P1A3. Cette entrée contient l’adresse du bloc du fichier qui
+contient l’article de code  P1A3.  On accède à ce bloc.
+Les articles sont triés sur <code class="docutils literal notranslate"><span class="pre">A</span></code>.
+Soit tous les articles de code compris entre P1A3 et P3G5 sont dans ce bloc soit ils sont
+à cheval sur deux blocs adjacents (ils ne peuvent pas être sur plus de 2 blocs
+adjacents). Dans ce dernier cas, une lecture du bloc
+adjacent chaîné est nécessaire. Donc la recherche coûte 2 ou 3 accès bloc.</p>
+</div>
+</div></blockquote>
 <ul class="simple">
 <li><p>Même question avec l’index dense, pour une recherche sur l’attribut
 <code class="docutils literal notranslate"><span class="pre">B</span></code>.</p></li>
 </ul>
 <blockquote>
-<div></div></blockquote>
+<div><div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>La recherche utilise  l’index dense sur <code class="docutils literal notranslate"><span class="pre">B</span></code>. La  différence essentielle
+est que le parcours séquentiel s’effectue <em>au niveau des feuilles de l’index</em>.
+Il n’est plus possible de le faire sur le fichier car ce dernier n’est plus
+trié.</p>
+<p>Pour chaque entrée trouvée dans une feuille, il faut effectuer une lecture de bloc
+dans le fichier de données. Au pire, il faut lire autant de blocs que
+d’enregistrements, soit 100 lectures qui viennent s’ajouter aux deux blocs
+lus dans l’index. Le coût prédominant est donc dans ce cas la multiplication
+des accès aléatoires au fichier de données, ce qui montre une nouvelle fois
+qu’une recherche par intervalle avec un index peut s’avérer contre-performante.</p>
+</div>
+</div></blockquote>
 </div></blockquote>
 </section>
 <section id="index-et-optimisation">
@@ -174,6 +215,12 @@ avec 4 entrées par bloc au maximum.</p></li>
 contenir qu’un seul bloc et l” index tient en mémoire. Dans ce cas, est-ce
 qu’il est préférable d’utiliser l’index ou de parcourir la table
 séquentiellement ? Pourquoi ?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Une lecture séquentielle est préférable : la sélectivité de l’index
+est très basse, et comme il s’agit d’un index dense, on risque de lire la même
+bloc plusieurs fois.</p>
+</div>
 </li>
 </ul>
 </div></blockquote>
@@ -199,14 +246,37 @@ séquentiellement ? Pourquoi ?</p>
 </div>
 <p>Questions:</p>
 <blockquote>
-<div><ul class="simple">
-<li><p>Existe-t-il un index ? sur quel(s) attribut(s) de quel(s) table(s) ?</p></li>
+<div><ul>
+<li><p>Existe-t-il un index ? sur quel(s) attribut(s) de quel(s) table(s) ?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il existe un index sur l’attribut code de la table Produits.</p>
+</div>
+</li>
 <li><p>Algorithme de jointure : Expliquer en détail le plan d’exécution (accès
 aux tables, sélections, jointure, projections)</p></li>
 <li><p>Ajout d’index : On crée un index sur l’attribut <code class="docutils literal notranslate"><span class="pre">note</span></code>  de la table
 <code class="docutils literal notranslate"><span class="pre">NoteMag</span></code>. Expliquez les améliorations en
 terme de plan d’exécution apportées par la création de cet index.</p></li>
 </ul>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<blockquote>
+<div><p>Après création d’index le plan est :</p>
+</div></blockquote>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Plan d&#39;execution
+----------------
+0 SELECT STATEMENT
+  1 NESTED LOOPS
+    2 NESTED LOOPS
+      3 TABLE ACCESS FULL PRIXFOUR
+      4 TABLE ACCESS BY INDEX ROWID PRODUITS
+        5 INDEX UNIQUE SCAN PRODUITS_CODE
+    6 TABLE ACCESS BY INDEX ROWID NOTEMAG
+      7 INDEX RANGE SCAN NOTE_MAG
+</pre></div>
+</div>
+</div>
 </div></blockquote>
 </section>
 </section>
@@ -237,8 +307,29 @@ Un abonné peut avoir écouté une chanson plusieurs fois (à des dates différe
 <li><p>Pour la table Ecoute,
 identifiez les clés primaires et étrangères.</p></li>
 </ul>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
 <ul class="simple">
-<li><p>Donnez la commande SQL pour créer la table Ecoute.</p></li>
+<li><p>Clé primaire: (idAbonné, idChanson, date)</p></li>
+<li><p>Clés étrangères: idAbonné, idChanson</p></li>
+</ul>
+</div>
+<ul>
+<li><p>Donnez la commande SQL pour créer la table Ecoute.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Ecoute</span><span class="p">(</span>
+    <span class="n">idAbonné</span> <span class="nb">integer</span><span class="p">,</span>
+    <span class="n">idChanson</span> <span class="nb">integer</span><span class="p">,</span>
+    <span class="nb">date</span> <span class="nb">DATE</span><span class="p">,</span>
+    <span class="n">téléchargé</span> <span class="nb">BOOLEAN</span><span class="p">,</span>
+    <span class="k">PRIMARY</span> <span class="k">KEY</span> <span class="p">(</span><span class="n">idAbonné</span><span class="p">,</span> <span class="n">idChanson</span><span class="p">,</span> <span class="nb">date</span><span class="p">)</span>
+    <span class="k">FOREIGN</span> <span class="k">KEY</span> <span class="p">(</span><span class="n">idAbonné</span><span class="p">)</span> <span class="k">REFERENCES</span> <span class="n">Abonné</span><span class="p">(</span><span class="n">id</span><span class="p">),</span>
+    <span class="k">FOREIGN</span> <span class="k">KEY</span> <span class="p">(</span><span class="n">idChanson</span><span class="p">)</span> <span class="k">REFERENCES</span> <span class="n">Chanson</span><span class="p">(</span><span class="n">id</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</li>
 <li><p>Une recherche par index est-elle possible si on interroge la table Ecoute sur l’id
 d’une chanson (justifier)?</p></li>
 <li><p>Une recherche par index est-elle possible si on interroge la table Ecoute sur l’id
@@ -340,7 +431,7 @@ d’un abonné (justifier)?</p></li>
 </div></blockquote>
 <p>On met en place un index sur l’attribut <code class="docutils literal notranslate"><span class="pre">nom</span></code> de cette table.</p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>Construire l’arbre B d’ordre 2 (4 entrées max par bloc) correspondant à cet ensemble d’enregistrements,
 en respectant l’ordre d’insertion. Donner les étapes de construction
 intermédiaires importantes (celles qui produisent un changement de la structure de l’arbre).</p></li>
@@ -348,7 +439,28 @@ intermédiaires importantes (celles qui produisent un changement de la structure
 par bloc sur disque. On recherche les noms des artistes dont
 l’initiale du nom se trouve entre “B” et “I” (inclus).
 Combien de blocs disque doivent être chargées au minimum pour répondre
-à cette requête en utilisant l’arbre B+ ? Justifier.</p></li>
+à cette requête en utilisant l’arbre B+ ? Justifier.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<figure class="align-center" id="arbreb-blanc-juin20">
+<a class="reference internal image-reference" href="_images/arbreb-blanc-juin20.png"><img alt="_images/arbreb-blanc-juin20.png" src="_images/arbreb-blanc-juin20.png" style="width: 90%;" /></a>
+</figure>
+</div>
+<p>Deux graphes simples</p>
+<blockquote>
+<div><p>Il s’agit ici d’une requête par intervalle, facilement réalisable avec un arbre B.
+On commence par faire une recherche du premier enregistrement dont
+l’initiale du nom est égale ou immédiatement supérieure à “B”.
+On a trouvé le premier enregistrement répondant à la requête
+(en parcourant ici 3 feuilles de l’arbre B), il suffit
+d’exploiter le chaînage des feuilles pour trouver les autres enregistrements
+(en parcourant ici encore 2 feuilles de l’arbre B). On
+charge donc 5 blocs d’index. Il faut ensuite récupérer
+les données pointées par l’index sur disque. Au mieux, toutes
+les données sont stockées dans une même bloc (peu probable mais
+possible…). Donc on charge au minimum 6 blocs.</p>
+</div></blockquote>
+</li>
 </ul>
 </div></blockquote>
 </section>
@@ -387,12 +499,51 @@ que les seuls index sont ceux sur les clés primaires</p></li>
 </div>
 <p>Questions:</p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>Donnez la requête correspondante</p></li>
 <li><p>Expliquez ce plan, en indiquant notamment quels index existent, et lesquels
-n’existent pas</p></li>
+n’existent pas</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<figure class="align-center" id="pex-blanc-juin20">
+<a class="reference internal image-reference" href="_images/pex-blanc-juin20.png"><img alt="_images/pex-blanc-juin20.png" src="_images/pex-blanc-juin20.png" style="width: 90%;" /></a>
+</figure>
+<p>L’index sur Ecoute(idAbonne) ne sert à rien dans cette requête. Les deux index suivants
+peuvent être utilisés pour la jointure entre Chanson et Ecoute
+(donc boucles imbriquées avec index) mais pas tous les deux en même temps,
+il faut choisir l’un des deux (les deux options sont acceptées ici).
+Ensuite tri-fusion ou boucles-imbriquées acceptés pour la seconde jointure
+(dépend de la taille des tables). Ci-dessous, un tri-fusion pour la seconde jointure.</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">select</span> <span class="n">idAbonne</span><span class="p">,</span> <span class="n">Album</span><span class="p">.</span><span class="n">nom</span>
+<span class="k">from</span> <span class="n">Ecoute</span><span class="p">,</span> <span class="n">Chanson</span><span class="p">,</span> <span class="n">Album</span>
+<span class="k">where</span> <span class="n">Ecoute</span><span class="p">.</span><span class="n">id_chanson</span> <span class="o">=</span> <span class="n">Chanson</span><span class="p">.</span><span class="n">id</span>
+<span class="k">and</span> <span class="n">Chanson</span><span class="p">.</span><span class="n">id_album</span> <span class="o">=</span> <span class="n">Album</span><span class="p">.</span><span class="n">id</span>
+<span class="k">and</span> <span class="nb">date</span><span class="o">=</span><span class="s1">&#39;29/05/2013&#39;</span><span class="p">;</span>
+</pre></div>
+</div>
+</div>
+</li>
 <li><p>Quels index pouvez-vous ajouter pour optimiser cette requête, et quel est le plan d’exécution
-correspondant?</p></li>
+correspondant?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>L’index sur Album(id) est utilisé pour la seconde jointure qui devient donc une jointure
+par boucles imbriquées avec index. L’index sur Ecoute(date) n’est pas utilisé pour
+la jointure entre Ecoute et Chanson mais pour effectuer une sélection des
+enregistrements sur la table directrice Ecoute dans la première jointure.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>0 SELECT STATEMENT
+1*    NESTED LOOPS
+2*        NESTED LOOPS
+3            TABLE ACCESS BY ROWID       Ecoute
+4*             INDEX RANGE SCAN          IDX-Ecoute_DATE
+5            TABLE ACCESS BY ROWID       Chanson
+6              INDEX RANGE SCAN          IDX-Chanson_IDChanson
+7         TABLE ACCESS BY ROWID          Album
+8              INDEX RANGE SCAN          IDX_Album_ID
+</pre></div>
+</div>
+</div>
+</li>
 </ul>
 </div></blockquote>
 </section>
@@ -403,12 +554,37 @@ correspondant?</p></li>
 \[H = r_2[x] r_3[x] w_1[y] r_3[y] w_3[y] r_1[z] w_2[y] c_1 w_3[z] w_2[z] c_3 c_2\]</div>
 <p>Questions</p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>Donner la liste des conflits de H</p></li>
 <li><p>Donner le graphe de sérialisation de H. Que pouvez-vous déduire de ce graphe ?</p></li>
 <li><p>Donner l’exécution  finale obtenue par application de l’algorithme de verrouillage
 à deux phases. Donner le détail du déroulement de l’algorithme.</p></li>
-<li><p>Que se passerait-il si on ne posait que des verrous exclusifs?</p></li>
+<li><p>Que se passerait-il si on ne posait que des verrous exclusifs?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Réponses:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Sur x :  aucun conflit</p></li>
+<li><p>Sur y :  <span class="math notranslate nohighlight">\(w_1[y] r_3[y]\)</span>, <span class="math notranslate nohighlight">\(w_1[y] w_3[y]\)</span>, <span class="math notranslate nohighlight">\(r_3[y] w_2[y]\)</span>,
+<span class="math notranslate nohighlight">\(w_1[y] w_2[y]\)</span> et <span class="math notranslate nohighlight">\(w_3[y] w_2[y]\)</span></p></li>
+<li><p>Sur z :  <span class="math notranslate nohighlight">\(r_1[z] w_2[z]\)</span>,  <span class="math notranslate nohighlight">\(r_1[z] w_3[z]\)</span>, <span class="math notranslate nohighlight">\(w_3[z] w_2[z]\)</span></p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><span class="math notranslate nohighlight">\(T_1 \rightarrow T_3, T_3 \rightarrow T_2, T_1 \rightarrow T_2\)</span>.
+Il n’y a pas de cycle, dont H est <em>sérialisable</em>.</p></li>
+<li><p>Exécution finale:</p>
+<div class="math notranslate nohighlight">
+\[H' =  r_2[x] r_3[x] w_1[y] r_1[z] c_1 r_3[y] w_3[y] w_3[z] c_3 w_2[y] w_2[z] c_2\]</div>
+</li>
+<li><p>Si on ne pose que des verrous exclusifs (par exemple avec la clause <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">update</span></code>),
+<span class="math notranslate nohighlight">\(r_3[x]\)</span> (donc <span class="math notranslate nohighlight">\(T_3\)</span>) est bloqué par  <span class="math notranslate nohighlight">\(T_2\)</span> qui a effectué <span class="math notranslate nohighlight">\(r_2[x]\)</span>.
+<span class="math notranslate nohighlight">\(T_3\)</span> doit attendre la fin des deux autres transactions pour reprendre.</p></li>
+</ul>
+</div>
+</li>
 </ul>
 </div></blockquote>
 </section>
@@ -445,6 +621,53 @@ et donnez le nombre total d’entrées/sorties, sans compter
 l’écriture finale du fichier trié.</p></li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Il faut d’abord trier le fichier:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>(anguille, 43),  (bar, 44), (babouin, 12), (chameau, 22),
+(chat, 3), (dauphin, 40),  (escargot,44),
+(girafe, 13), (gnou, 1),  (gorille,98),
+(hamster, 6), (hyène,9), (jaguar, 17),
+(licorne, 2),  (lion, 8),   (piranha,55), (saumon, 82),  (requin, 56),
+(tigre,76), (zèbre, 11),
+</pre></div>
+</div>
+<p>Ensuite on groupe par 2 et on crée le premier niveau d’index:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>anguille -- babouin -- chat -- escargot -- gnou -- hasmter --
+jaguar -- lion -- saumon -- tigre
+</pre></div>
+</div>
+<p>Encore une fois:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>anguille --  chat --  gnou -- jaguar -- saumon
+</pre></div>
+</div>
+<p>Puis</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>anguille --   gnou -- saumon
+</pre></div>
+</div>
+<p>Et finalement il reste <code class="docutils literal notranslate"><span class="pre">(anguille,</span> <span class="pre">saumon)</span></code> à la racine, soit 4 niveaux.</p>
+</li>
+<li><p>Standard.</p></li>
+<li><p>La première recherche doit ramener trois enregistrements.
+Dans le cas de l’index non-dense, le fichier est trié.
+On peut donc parcourir séquentiellement à partir du
+premier “g”. On lit donc 4 blocs dans l’index pour arriver aux feuilles,
+puis 2 blocs en parcours séquentiel.</p>
+<p>Les enregistrements ne sont pas ordonnés pour l’arbre B. Il faut donc, après le
+parcours d’index, parcourir les feuilles pour les valeurs de clé entre 40 et 50,
+avec une lecture de bloc (au pire) pour chacune.</p>
+</li>
+<li><p>On utilise 2 blocs pour l’entrée, un pour la sortie. Dans
+les 2 blocs on place 4 enregistrements. Il y a 20 animaux
+donc (1) 5 fragments initiaux de 2 blocs, puis (2)
+2 fragments de 4 blocs, et
+un  fragment de 2 blocs, puis (3) un fragment de 8 blocs et un  de deux.
+Et on termine par une lecture. Donc coût = <span class="math notranslate nohighlight">\(3 \times 2 \times 10 + 10 = 70\)</span>.
+Plus subtil: on peut utiliser 3 blocs pour la phase de tri, et diviser la mémoire
+en 2+1 seulement pour la phase de fusion.</p></li>
+</ul>
+</div>
 </section>
 <section id="jointures-et-optimisation-9-points">
 <h3>Jointures et optimisation (9 points)<a class="headerlink" href="#jointures-et-optimisation-9-points" title="Lien permanent vers ce titre">¶</a></h3>
@@ -486,6 +709,50 @@ Décrire l’algorithme de jointure par hachage pour <span class="math notransla
 et évaluer son coût.</p></li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Il y a au plus 20 enregistrements, et il faut pour l’atteindre
+que la clé étrangère soit <code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">null</span></code>,
+et le respect de l’intégrité référentielle de <span class="math notranslate nohighlight">\(S\)</span> vers <span class="math notranslate nohighlight">\(T\)</span>. La clé
+est <span class="math notranslate nohighlight">\(c\)</span> (il y a dépendance fonctionnelle de <span class="math notranslate nohighlight">\(c\)</span>  vers <span class="math notranslate nohighlight">\(e\)</span>).</p></li>
+<li><p>Dans le pire des cas il y a <span class="math notranslate nohighlight">\(200~000 \times 20\)</span> enregistrements
+(s’il y a une seule valeur pour <span class="math notranslate nohighlight">\(d\)</span>).</p></li>
+<li><p>On met <span class="math notranslate nohighlight">\(S\)</span> en mémoire (donc 2 blocs) et on l’organise
+comme une table de hachage sur l’attribut <span class="math notranslate nohighlight">\(S.e\)</span>. Puis on lit <span class="math notranslate nohighlight">\(T\)</span> séquentiellement (50 blocs),
+en cherchant pour chaque enregistrement <span class="math notranslate nohighlight">\((e_i,f_i)\)</span> de <span class="math notranslate nohighlight">\(T\)</span> le ou les
+enregistrements correspondant dans la table de hachage.</p>
+<p>Coût: 52 blocs.</p>
+</li>
+<li><p>On parcourt <span class="math notranslate nohighlight">\(S\)</span> séquentiellement (2 blocs), pour chaque enregistrement
+<span class="math notranslate nohighlight">\((c, d,e)\)</span> (il y en a 20), on utilise l’index pour accéder à <span class="math notranslate nohighlight">\(T\)</span>. Pour chaque entrée
+trouvée dans l’index il faut lire un bloc (au pire) sur le disque.</p>
+<p>Coût: 2 + 20 blocs.</p>
+</li>
+<li><p>On constate qu’il n’existe pas d’index disponible
+pour la jointure avec <span class="math notranslate nohighlight">\(R\)</span>, car la clé primaire de <span class="math notranslate nohighlight">\(R\)</span> ne se trouve
+en tant que clé étrangère ni dans <span class="math notranslate nohighlight">\(S\)</span> ni dans <span class="math notranslate nohighlight">\(T\)</span>.</p>
+<p>L’algorithme : on évalue  <span class="math notranslate nohighlight">\(S \Join T\)</span>, comme indiqué précemment.
+Il faut ensuite choisir un algorithme de jointure sans index.
+Etant donnée la petite taille de <span class="math notranslate nohighlight">\(S \Join T\)</span>, on choisit
+la jointure par boucles imbriquées. On construit une table de hachage en mémoire sur le résultat de <span class="math notranslate nohighlight">\(S \Join T\)</span>
+(2 blocs au maximum, clé de hachage : <span class="math notranslate nohighlight">\(d\)</span>) ; on lit séquentiellement <span class="math notranslate nohighlight">\(R\)</span>
+en joignant chaque enregistrement avec la table de hachage.</p>
+<p>La lecture de <span class="math notranslate nohighlight">\(R\)</span> est prédominante : 20 000 blocs à lire séquentiellement.</p>
+<p>Toutes les autres possibilités sont moins bonnes, à cause de la taille
+du résultat de la jointure entre <span class="math notranslate nohighlight">\(R\)</span> et une autre table. Penser par exemple
+au coût qui résulterait d’un tri préalable de <span class="math notranslate nohighlight">\(R\)</span> sur l’attribut <span class="math notranslate nohighlight">\(d\)</span> pour
+une jointure par tri-fusion.</p>
+</li>
+<li><p>Pour chaque tuple de <span class="math notranslate nohighlight">\(R\)</span>, on trouve <span class="math notranslate nohighlight">\(5000 \times 0,05 = 250\)</span>
+enregistrements dans <span class="math notranslate nohighlight">\(S\)</span>: 50 M d’enregistrements au final.</p></li>
+<li><p>Jointure par hachage : je hache <span class="math notranslate nohighlight">\(S\)</span> en 25 fragments de
+200 enregistrements chacun (20 blocs en mémoire). Ensuite je hache <span class="math notranslate nohighlight">\(R\)</span> en 25
+fragments également (leur taille m’importe peu). Puis je fais la jointure
+entre chaque paire de fragmentss. Coût (très  approximatif) =
+<span class="math notranslate nohighlight">\(3 \times (|S| + |R|) = 3 \times (20 000 + 500) = 61 500\)</span>.</p></li>
+</ul>
+</div>
 </section>
 <section id="id1">
 <h3>Concurrence (6 points)<a class="headerlink" href="#id1" title="Lien permanent vers ce titre">¶</a></h3>
@@ -527,6 +794,35 @@ On suppose que toutes les transactions débutent
 au même moment.</p></li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Les transactions sont <span class="math notranslate nohighlight">\(T_1 = r_1[x] w_1[x]\)</span>, <span class="math notranslate nohighlight">\(T_2 = r_2[y] r_2[x] r_2[z] w_2[z]\)</span>,
+<span class="math notranslate nohighlight">\(T_3 = r_3[y] w_3[y] r_3[z] w_3[z]\)</span></p>
+<p><code class="docutils literal notranslate"><span class="pre">ModifierAvis</span></code> doit lire un avis et
+le modifier. On peut donc considérer qu’il s’agit de <span class="math notranslate nohighlight">\(T_1\)</span>. <span class="math notranslate nohighlight">\(T_2\)</span>
+est également une possibilité, en supposant qu’on lit d’abord la personne
+puis la question.</p>
+</li>
+</ul>
+<dl class="simple">
+<dt>– Les conflits sont: <span class="math notranslate nohighlight">\(w_1[x] \to r_2[x]\)</span>,  <span class="math notranslate nohighlight">\(r_2[y] \to w_3[y]\)</span>,</dt><dd><p><span class="math notranslate nohighlight">\(r_3[y] \to w_2[z]\)</span>  et <span class="math notranslate nohighlight">\(w_2[z] \to w_3[z]\)</span>.  On trouve un cycle
+<span class="math notranslate nohighlight">\(T_2\)</span>  et <span class="math notranslate nohighlight">\(T_3\)</span>  donc <span class="math notranslate nohighlight">\(H\)</span> n’est pa sérialisable.</p>
+</dd>
+</dl>
+<ul>
+<li><p><span class="math notranslate nohighlight">\(r_2[x]\)</span> est une lecture sale (car précédée de <span class="math notranslate nohighlight">\(w_1[x]\)</span>).
+Si <span class="math notranslate nohighlight">\(T_1\)</span> s’interrompt avant le <code class="docutils literal notranslate"><span class="pre">commit</span></code>, la valeur
+lue par <span class="math notranslate nohighlight">\(r_2[x]\)</span> n’existera plus et <span class="math notranslate nohighlight">\(T_2\)</span>  risque de
+valider un état incohérent.</p></li>
+<li><p>Après verrouillage à deux phases, on obtient :</p>
+<div class="math notranslate nohighlight">
+\[r_1[x] r_2[y] w_1[x] r_3[y] (T_2 \ \rm{attente\ sur }\ r_2[x]) (T_3\ \rm{\ attente\ sur\ }w_3[y]) C_1 r_2[x] r_2[z] w_2[z] C_2 w_3[y] r_3[z] w_3[z] C_3\]</div>
+</li>
+<li><p>Avec l’algo de versionnement, on rejette <span class="math notranslate nohighlight">\(w_3[z]\)</span>
+car l’écriture <span class="math notranslate nohighlight">\(w_2[z]\)</span> est intervenue entre-temps.</p></li>
+</ul>
+</div>
 </section>
 </section>
 <section id="examen-juin-2023">
