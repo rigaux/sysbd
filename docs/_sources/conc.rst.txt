@@ -1019,7 +1019,7 @@ Exercices
     - :math:`H_{2}:r_{1}[x]\:w_{2}[y]\:r_{3}[y]\:w_{3}[z]\:c_{3}\:w_{1}[z]\:c_{1}\:w_{2}[x]\:c_{2}`
     - :math:`H_{3}:w_{3}[z]\:w_{1}[z]\:w_{2}[y]\:w_{2}[x]\:c_{2}\:r_{3}[y]\:c_{3}\:r_{1}[x]\:c_{1}`
 
-  .. ifconfig:: conc in ('public')
+  .. ifconfig:: devoir3 in ('public')
 
       .. admonition:: Correction
 
@@ -1312,7 +1312,7 @@ Exercices
         deux phases à partir de *H*? Quel prix sera appliqué pour la seconde 
         commande, le même que pour la première ou le prix modifié?
 
-  .. ifconfig:: conc in ('public')
+  .. ifconfig:: devoir3 in ('public')
 
       .. admonition:: Correction
 

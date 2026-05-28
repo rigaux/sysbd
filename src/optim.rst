@@ -1254,7 +1254,7 @@ si vous préférez.
         
         select MAX(idFilm) from Film;
 
-  .. ifconfig:: optim in ('public')
+  .. ifconfig:: devoir2 in ('public')
 
       .. admonition:: Correction
  
@@ -1315,7 +1315,7 @@ si vous préférez.
         arborescente ou sous forme d'une expression EXPLAin, et expliquez en détail ce plan.
 
 
-  .. ifconfig:: optim in ('public')
+  .. ifconfig:: devoir2 in ('public')
 
       .. admonition:: Correction
  
@@ -1663,7 +1663,7 @@ si vous préférez.
     
       Quel est le plan d'exécution choisi par Oracle?  Expliquez le en détail.
 
-  .. ifconfig:: optim in ('public')
+  .. ifconfig:: devoir2 in ('public')
 
       .. admonition:: Correction
 

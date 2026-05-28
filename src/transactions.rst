@@ -2683,7 +2683,7 @@ Exercices
     dans quel scénario l'exécution concurrente de deux procédures d'échange peut aboutir
     à ce que deux nuplets aient la même valeur.
 
-    .. ifconfig:: transactions in ('public')
+    .. ifconfig:: devoir3 in ('public')
 
       .. admonition:: Correction
 
@@ -2770,7 +2770,7 @@ Exercices
       a lu ce même nuplet (et ce, jusqu'à la fin de cette autre transaction). Que va-t-il se passer 
       dans ce mode avec notre exécution concurrente?
 
-    .. ifconfig:: transactions in ('public')
+    .. ifconfig:: devoir3 in ('public')
 
       .. admonition:: Correction
 

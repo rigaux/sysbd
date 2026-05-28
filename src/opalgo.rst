@@ -2128,7 +2128,7 @@ Exercices
         ou la plus grande\,?
 
 
-  .. ifconfig:: opalgo in ('public')
+  .. ifconfig:: devoir2 in ('public')
 
       .. admonition:: Correction
 

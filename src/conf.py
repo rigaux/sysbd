@@ -66,9 +66,8 @@ def setup(app):
     app.add_config_value('stock', '', True)
     app.add_config_value('index', '', True)
     app.add_config_value('hachage', '', True)
-    app.add_config_value('devoir1', '', True)
-    app.add_config_value('opalgo', '', True)
     app.add_config_value('transactions', '', True)
+    app.add_config_value('opalgo', '', True)
     app.add_config_value('optim', '', True)
     app.add_config_value('conc', '', True)
     app.add_config_value('rp', '', True)
@@ -76,21 +75,27 @@ def setup(app):
     app.add_config_value('annales_2020_2', '', True)
     app.add_config_value('annales_2022', '', True)
     app.add_config_value('annales_2023', '', True)
+    app.add_config_value('devoir1', '', True)
+    app.add_config_value('devoir3', '', True)
+    app.add_config_value('devoir2', '', True)
 
 latex = 'private'
 stock='public'
 index='public'
 hachage='public'
-devoir1='public'
 opalgo='public'
 optim='public'
-transactions='private'
-conc='private'
-rp='private'
+transactions='public'
+conc='public'
+rp='public'
 annales_2020_1='public'
 annales_2020_2='public'
 annales_2022='public'
 annales_2023='private'
+
+devoir1='public'
+devoir2='public'
+devoir3='private'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

@@ -2314,6 +2314,29 @@ affiché est toujours le même, alors que des billets sont bel et bien réservé
 à Timothée ?</p></li>
 </ul>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Réponses</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Justification: si on laissait Pascal modifier et valider par <code class="docutils literal notranslate"><span class="pre">commit</span></code>, Julie
+ne pourrait plus faire de <code class="docutils literal notranslate"><span class="pre">rollback</span></code> (qui annulerait la validation de Pascal).
+Ce serait une situation insoluble, contraire au principe d’ACIDité. Le blocage
+prendra fin au moment où Julie termine sa transaction par <code class="docutils literal notranslate"><span class="pre">commit</span></code> ou <code class="docutils literal notranslate"><span class="pre">rollback</span></code>.</p></li>
+<li><p>Justin crée une très longue transaction qui va accumuler les verrouillages. De plus,
+il risque en cas de panne de devoir tout recommencer. Il serait plus judicieux de valider
+à chaque fois que la base atteint un état cohérent, soit, probablement, après chaque
+fiche de paie.</p></li>
+<li><p>Il faut d’abord vérifier si Barnabé a fait un <code class="docutils literal notranslate"><span class="pre">commit</span></code>, sinon lui-seul peut voir ses
+propres mises à jour. Ensuite, on peut supposer qu’Alphonsine est en mode <code class="docutils literal notranslate"><span class="pre">repeatable</span> <span class="pre">read</span></code>
+et reste dans la même transaction, qui lit la base telle qu’elle existait à son origine.
+Un <code class="docutils literal notranslate"><span class="pre">commit</span></code> ou un <code class="docutils literal notranslate"><span class="pre">rollback</span></code> devrait permettre de débuter une nouvelle transaction
+et de voir apparaître la mise à jour de Barnabé.</p></li>
+<li><p>Soit il faut réinitialiser une nouvelle transaction à chaque lecture, soit se mettre
+en mode <code class="docutils literal notranslate"><span class="pre">read</span> <span class="pre">committed</span></code></p></li>
+</ul>
+</div></blockquote>
+</div>
 </div>
 <div class="admonition-exercice-ex-transaction-2-la-serialisabilite admonition" id="ex-transaction-2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-transaction-2">Ex-transaction-2</a>:  la sérialisabilité</p>
@@ -2379,6 +2402,22 @@ tente de modifier un nuplet qui est en cours de lecture par une autre transactio
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<dl class="simple">
+<dt>Réponses</dt><dd><ul class="simple">
+<li><p><em>A</em> et <em>B</em> ont la même valeur: soit  <em>Copie(A, B)</em> s’effectue en permier, suivie
+de <em>Copie(B,A)</em>, et les deux nuplets valent <em>a</em>, soit c’est l’inverse et les deux nuplets valent <em>b</em></p></li>
+<li><p>Si on exécute dans cet ordre, ce n’est pas une copie qu’on effectue mais un échange:
+première transaction lit la valeur de <em>A</em> et l’écrit dans <em>B</em>, la seconde fait l’inverse. Donc, à
+la fin, <em>A</em> vaut <em>b</em> et  <em>B</em> vaut  <em>a</em>. En en déduit qu’elle n’est pas sérialisable.</p></li>
+<li><p>Si les lectures bloquent les écritures, alors l’écriture sur <em>A</em> est bloquée por la lecture
+de <em>B</em> et réciproquement: c’est un interblocage, le prix à payer (parfois) pour une isolation
+complète. Une des transactions sera rejetée.</p></li>
+</ul>
+</dd>
+</dl>
+</div>
 </div>
 <div class="admonition-exercice-ex-transaction-3-serialisabilite-et-mode-autocommit admonition" id="ex-transaction-3">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-transaction-3">Ex-transaction-3</a>:  sérialisabilité et mode autocommit</p>

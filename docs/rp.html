@@ -907,6 +907,30 @@ inutiles dans le journal?</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Liste des transactions validées: <span class="math notranslate nohighlight">\(\{T_1, T_4\}\)</span>.
+Liste des transactions actives: <span class="math notranslate nohighlight">\(\{T_2, T_3\}\)</span>.
+On remarque un <code class="docutils literal notranslate"><span class="pre">checkpoint</span></code>, donc il est inutile de refaire <span class="math notranslate nohighlight">\(T_1\)</span>.</p>
+<p>Il faut donc commencer par refaire les deux écritures de <span class="math notranslate nohighlight">\(T_4\)</span>.
+Puis il faut défaire, <em>dans l’ordre inverse</em>, les écritures des
+transactions actives: <em>x</em> revient à 40, <em>z</em> à 15, <em>y</em> à 5.</p>
+<p>Remarquons le cas de <em>x</em>: le Redo l’a remis
+à sa valeur validée par <span class="math notranslate nohighlight">\(T_4\)</span>, soit 40.
+Le Undo est donc, <em>pour cet exemple précis</em>, inutile.
+Mais, en général, l’écriture de <span class="math notranslate nohighlight">\(T_2\)</span>
+a pu entraîner une écriture de la valeur non
+validée (60) dans la base, et il faut impérativement la défaire
+car on ne peut être sûr d’avoir refait le dernier <code class="docutils literal notranslate"><span class="pre">commit</span></code>
+sur <em>x</em>.</p>
+</li>
+<li><p>Il est inutile de <em>défaire</em> avec les mises à jour différées (on
+est sûr que les blocs « sales » ne sont jamais écrits
+dans les fichiers de la base).
+Les valeurs anciennes dans les <code class="docutils literal notranslate"><span class="pre">write</span></code> sont donc inutiles.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-rp2-la-reprise-sur-panne-a-la-main admonition" id="ex-rp2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp2">ex-rp2</a>: la reprise sur panne à la main</p>
@@ -915,6 +939,14 @@ inutiles dans le journal?</p></li>
 du <em>log</em> dans l’ordre inverse des insertions, et s’arrête dès
 que possible.</p>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>L’idée est simple: il suffit de refaire la dernière opération
+<code class="docutils literal notranslate"><span class="pre">commit</span></code> pour chaque donnée. On les prend donc dans l’ordre
+inverse, et on garde une liste des données réparées. Si on arrive sur
+un <code class="docutils literal notranslate"><span class="pre">write</span></code> d’une donnée déjà réparée, il est inutile de la refaire.
+On s’arrête au premier <code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> trouvé en remontant le temps.</p>
+</div>
 </div>
 <div class="admonition-exercice-ex-rp3-petit-questionnaire admonition" id="ex-rp3">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp3">ex-rp3</a>: petit questionnaire</p>
@@ -957,6 +989,14 @@ que doit-on conserver dans le log,?</p>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>idempotentes (en refaisant plusieurs fois on arrive au même résultat)</p></li>
+<li><p>le Redo</p></li>
+<li><p>la valeur après mise à jour.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-rp4-pourquoi-dans-l-ordre-inverse admonition" id="ex-rp4">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-rp4">ex-rp4</a>: pourquoi dans l’ordre inverse?</p>
@@ -966,6 +1006,12 @@ Redo dans l’ordre inverse de l’exécution
 (donner les entrées du fichier journal, et expliquer
 le déroulement de l’annulation).</p>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il faut prendre l’exemple d’une transaction qui effectue au
+moins 2 fois une modification sur la même donnée,: il faut
+absolument les défaire en ordre inverse.</p>
+</div>
 </div>
 </section>
 </section>

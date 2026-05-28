@@ -66,7 +66,7 @@ S1: Supports de stockage
 
 .. admonition::  Supports complémentaires:
 
-    * `Diapositives: supports de stockage <http://sys.bdpedia.fr/files/slstock.pdf>`_
+    * `Diapositives: supports de stockage <./files/slstock.pdf>`_
     * `Vidéo sur les dispositifs de stockage <https://mediaserver.lecnam.net/permalink/v1263dc99e054tod6ogr/>`_ 
     
 Un système informatique offre plusieurs mécanismes de stockage
@@ -575,7 +575,7 @@ S2: Gestion des mémoires
 
 .. admonition::  Supports complémentaires:
 
-    * `Diapositives: gestion des mémoires <http://sys.bdpedia.fr/files/slcache.pdf>`_
+    * `Diapositives: gestion des mémoires <./files/slcache.pdf>`_
     * `Vidéo sur la gestion des mémoires <https://mediaserver.lecnam.net/permalink/v1263dc990cb5lxx5c88/>`_ 
     
     
@@ -1097,7 +1097,7 @@ S3: Enregistrements, blocs et fichiers
 
 .. admonition::  Supports complémentaires:
 
-   * `Diapositives: Enregistrements, blocs et fichiers <http://sys.bdpedia.fr/files/slfichiers.pdf>`_
+   * `Diapositives: Enregistrements, blocs et fichiers <./files/slfichiers.pdf>`_
    * `Vidéo sur les enregistrements, blocs et fichiers <https://mediaserver.lecnam.net/permalink/v1263dc99df81bkjcjs5/>`_ 
     
 Pour le système d'exploitation, un fichier est une séquence

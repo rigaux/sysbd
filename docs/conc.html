@@ -1001,6 +1001,18 @@ vérifiez s’il y a des exécutions équivalentes.</p>
 \[r_1(c_1) r_1(c_2)  Res(c_2, s, 2)  \ldots r_1(c_n) r_1(s)\]</div>
 <p>Appliquer le contrôle multi-versions. Que constate-t-on ?</p>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p><span class="math notranslate nohighlight">\(T_1\)</span> lit d’abord <span class="math notranslate nohighlight">\(c_1\)</span> et <span class="math notranslate nohighlight">\(c_2\)</span>. La réservation
+s’exécute: un conflit apparaît entre <span class="math notranslate nohighlight">\(r_1(c_2)\)</span> et <span class="math notranslate nohighlight">\(w_2(c_2)\)</span>.
+Ensuite <span class="math notranslate nohighlight">\(T_1\)</span> finit ses lectures: le conflit potentiel
+serait entre <span class="math notranslate nohighlight">\(w_2(s)\)</span> et <span class="math notranslate nohighlight">\(r_1(s)\)</span> mais comme
+les  lectures de <span class="math notranslate nohighlight">\(T_1\)</span> on lieu sur l’état de la base
+au début de la transaction, le conflit est
+dans le sens <span class="math notranslate nohighlight">\(r_1(s) \to w_2(s)\)</span> l’exécution est sérialisable.
+Le résultat de la procédure de contrôle, en multiversion, est
+correct puisque toutes les lectures s’effectuent sur un état cohérent.</p>
+</div>
 </div>
 <div class="admonition-exercice-ex-multiversions2-les-limites-du-controle-de-concurrence-multi-versions admonition" id="ex-multiversions2">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-multiversions2">ex-multiversions2</a>: les limites du contrôle de concurrence multi-versions</p>
@@ -1059,6 +1071,24 @@ de cette exécution.</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Les deux procédures lisent la base avant toute modification, et en
+concluent toutes les deux que nos trois médecins sont de garde. Ce qui est vrai.</p></li>
+<li><p>Chaque procédure met « hors garde » son médecin respectif (soit Philippe
+et Michel) en pensant chacune qu’il en restera 2 (=3-1) à la fin. Mais
+après les <code class="docutils literal notranslate"><span class="pre">commit</span></code>, seule Alice est de garde.</p></li>
+<li><p>On trouve évidemment des conflits de <span class="math notranslate nohighlight">\(T_1\)</span> vers <span class="math notranslate nohighlight">\(T_2\)</span>
+et réciproquement, ce qui confirme que l’exécution n’est pas sérialisable.
+Le contrôle de concurrence MV vérifie, au moment de la mise à jour,
+que le médecin concerné n’a pas été modifié depuis le début
+de la transaction. C’est le cas, donc aucun blocage n’est effectué,
+et le résultat est incorrect. Ce ne serait pas le cas avec le verrouillage
+à deux phases qui bloquerait sur l’écriture d’un médecin qui a été
+<em>lu</em> par une autre transaction.</p></li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-debitcredit-le-cas-des-debits-credits admonition" id="ex-debitcredit">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-debitcredit">ex-debitcredit</a>: le cas des débits/crédits</p>
@@ -1108,6 +1138,62 @@ intervient après l’exécution de:math:<cite>w_{1}[B]</cite>?</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">Débit</span></code> et  <code class="docutils literal notranslate"><span class="pre">Crédit</span></code>  sont constitués chacun d’une
+lecture, suivie d’une écriture. Dans ce cas, les transactions
+<span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_3\)</span> seront:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_{1}: r_{1}[A] w_{1}[A] r_{1}[B] w_{1}[B] c_{1}\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_{2}: r_{2}[A] w_{2}[A] c_{2}\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(T_{3}: r_{3}[B] w_{3}[B] c_{3}\)</span></p></li>
+</ul>
+<p><em>H</em> contient toutes les opérations de <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_3\)</span>
+et respecte l’ordre des opérations dans chaque transaction. Donc <em>H</em>
+est bien une exécution concurrente de <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> et <span class="math notranslate nohighlight">\(T_3\)</span>.</p>
+</li>
+</ul>
+<blockquote>
+<div><ul class="simple">
+<li><p>Les conflits sur A: <span class="math notranslate nohighlight">\(r_{1}[A]\to w_{2}[A]\)</span>;
+<span class="math notranslate nohighlight">\(w_{1}[A] \to r_{2}[A]\)</span>; <span class="math notranslate nohighlight">\(w_{1}[A] \to w_{2}[A]\)</span>.</p></li>
+<li><p>Les conflits sur B: <span class="math notranslate nohighlight">\(r_{3}[B] \to w_{1}[B]\)</span>;
+<span class="math notranslate nohighlight">\(w_{3}[B] \to r_{1}[B]\)</span>; <span class="math notranslate nohighlight">\(w_{3}[B] \to w_{1}[B]\)</span>.</p></li>
+</ul>
+<blockquote>
+<div><p>Le graphe de sérialisation  a pour arêtes
+<span class="math notranslate nohighlight">\(T_{3}\rightarrow T_{1}\rightarrow T_{2}\)</span>.
+<em>H</em> est sérialisable, car le graphe ne contient pas de cycle.</p>
+</div></blockquote>
+</div></blockquote>
+<ul>
+<li><p>Voici le déroulé du verrouillage à deux phases.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(r_{1}[A]\)</span>, <span class="math notranslate nohighlight">\(r_{3}[B]\)</span> reçoivent les verrous de lecture et s’exécutent</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_{1}[A]\)</span> obtient le verrou d’écriture sur A (déjà obtenu en  lecture  par <span class="math notranslate nohighlight">\(T_1\)</span>) et s’exécute</p></li>
+<li><p><span class="math notranslate nohighlight">\(r_{2}[A]\)</span> bloquée en attente de verrou sur A, donc <span class="math notranslate nohighlight">\(T_2\)</span> bloquée</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_{3}[B]\)</span> obtient le verrou d’écriture sur B (déjà obtenu en  lecture  par <span class="math notranslate nohighlight">\(T_2\)</span>) et s’exécute</p></li>
+<li><p><span class="math notranslate nohighlight">\(r_{1}[B]\)</span> bloquée en attente de verrou sur B donc <span class="math notranslate nohighlight">\(T_1\)</span>  bloquée</p></li>
+<li><p><span class="math notranslate nohighlight">\(c_{3}\)</span>  s’exécute et relâche les verrous sur B donc  <span class="math notranslate nohighlight">\(r_{1}[B]\)</span>
+débloquée, obtient le verrou et s’exécute (<span class="math notranslate nohighlight">\(T_1\)</span> débloquée)</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_{2}[A]\)</span> et <span class="math notranslate nohighlight">\(c_{2}\)</span> bloquées car <span class="math notranslate nohighlight">\(T_2\)</span> bloquée</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_{1}[B]\)</span> obtient le verrou et s’exécute</p></li>
+<li><p><span class="math notranslate nohighlight">\(c_{1}\)</span> s’exécute et relâche les verrous sur A, donc
+<span class="math notranslate nohighlight">\(r_{2}[A]\)</span> , <span class="math notranslate nohighlight">\(w_{2}[A]\)</span> et <span class="math notranslate nohighlight">\(c_{2}\)</span> s’exécutent.</p></li>
+</ul>
+</div></blockquote>
+<p>Le résultat est</p>
+<div class="math notranslate nohighlight">
+\[H' =  r_{1}[A] r_{3}[B] w_{1}[A]w_{3}[B] c_{3} r_{1}[B] w_{1}[B] c_{1} r_{2}[A] w_{2}[A] c_{2}\]</div>
+<p>Si une panne intervient après l’exécution de <span class="math notranslate nohighlight">\(w_{1}[B]\)</span>,
+seule la transaction <span class="math notranslate nohighlight">\(T_{3}\)</span> (le débit de 50 sur B)
+est validée à ce moment.  Donc le compte A aura un solde de 100
+et B de 0.</p>
+</li>
+</ul>
+</div>
 </div>
 <div class="admonition-exercice-ex-2pl1-verrouillage-a-deux-phases admonition" id="ex-2pl1">
 <p class="admonition-title">Exercice <a class="reference internal" href="#ex-2pl1">ex-2pl1</a>: verrouillage à deux phases</p>
@@ -1182,6 +1268,37 @@ On a l’exécution concurrente suivante des deux transactions cherchant à leve
 </ul>
 </div></blockquote>
 </div></blockquote>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul>
+<li><p>Les conflits: sur <em>p</em> entre <span class="math notranslate nohighlight">\(r_2(p)\)</span> et <span class="math notranslate nohighlight">\(w_1(p)\)</span>;
+sur <em>m</em> entre <span class="math notranslate nohighlight">\(r_1(m)\)</span> et <span class="math notranslate nohighlight">\(w_2(m)\)</span>.</p></li>
+<li><p>On a donc les arêtes <span class="math notranslate nohighlight">\(T_1\to T_2\)</span>   et <span class="math notranslate nohighlight">\(T_2 \to T_1\)</span>.
+Le cycle est évident et l’exécution n’est pas sérialisable.</p></li>
+<li><p>Appliquons le  contrôle multiversions. Au moment
+de <span class="math notranslate nohighlight">\(w_1(p)\)</span>, on vérifie que <em>p</em> n’a pas été modifié
+depuis le début de la transaction: pas de problème. Même
+contrôle sur <span class="math notranslate nohighlight">\(w_2(m)\)</span>, et même conclusion. Cette
+exécution est donc acceptée par le contrôle multiversions
+alors qu’elle n’est pas sérialisable.</p></li>
+<li><p>Appliquons le verrouillage à deux phases. Les six
+premières lectures entraînent la pose de verrous partagés.
+Ensuite:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Au moment de <span class="math notranslate nohighlight">\(w_1(p)\)</span>, <span class="math notranslate nohighlight">\(T_1\)</span> est mise
+en attente sur le verrou partagé détenu par <span class="math notranslate nohighlight">\(T_2\)</span>.</p></li>
+<li><p>Au moment de <span class="math notranslate nohighlight">\(w_2(m)\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> est mise
+en attente sur le verrou partagé détenu par <span class="math notranslate nohighlight">\(T_1\)</span>.</p></li>
+</ul>
+</div></blockquote>
+<p>Les deux transactions s’attendent l’une l’autre: interblocage,
+le système va rejeter une des deux.</p>
+<p>Conclusion: le verrouillage à deux phases est le seul complètement
+correct, le seul à empêcher <em>toutes</em> les exécutions non sérialisables.</p>
+</li>
+</ul>
+</div>
 </div>
 </section>
 <section id="references">
