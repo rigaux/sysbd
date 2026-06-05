@@ -53,37 +53,31 @@
 100 octets par article.</p>
 <p>Questions :</p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>De combien de blocs a-t-on besoin au minimum pour  stocker tout
 le fichier si la taille d’un bloc est 8192 octets, sachant
 que chaque bloc contient un entête de 150 octets
-et qu’un enregistrement ne peut pas chevaucher 2 blocs?</p></li>
-</ul>
-<blockquote>
-<div><div class="admonition-correction admonition">
+et qu’un enregistrement ne peut pas chevaucher 2 blocs?</p>
+<div class="admonition-correction admonition">
 <p class="admonition-title">Correction</p>
 <p>Un bloc contient 8 042 octets utiles. Donc 80 enregistrements
 par bloc au maximum. On divise les 120 000 enregistrements par 80
 et on obtient 1 500 blocs</p>
 </div>
-</div></blockquote>
-<ul class="simple">
+</li>
 <li><p>On suppose maintenant que <em>F</em> est indexé par un index non dense
 sur <code class="docutils literal notranslate"><span class="pre">A</span></code>  et  un index dense sur un autre champ <code class="docutils literal notranslate"><span class="pre">B</span></code>. On peut
 stocker 100 entrées dans un bloc d’index et aucune place libre n’est laissée dans les blocs.
 Combien d’entrées y a-t-il dans les feuilles de l’index non dense?
-dans les feuilles de l’index dense?</p></li>
-</ul>
-<blockquote>
-<div><div class="admonition-correction admonition">
+dans les feuilles de l’index dense?</p>
+<div class="admonition-correction admonition">
 <p class="admonition-title">Correction</p>
 <p>Le fichier <em>F</em> contient 1 500 blocs et et trié sur <code class="docutils literal notranslate"><span class="pre">A</span></code>.
 L’index non dense contient donc 1500 entrées, une par bloc et cet index occupe 15
 blocs. L’index dense
 contient 120000 entrées, une par enregistrement, et occupe 1200 blocs..</p>
 </div>
-</div></blockquote>
-<ul>
+</li>
 <li><p>Supposons que l’index non dense a deux niveaux, racine
 comprise, et que seule la racine est en mémoire.  On se place dans le pire
 des cas où il faut une lecture physique  pour lire une feuille d’index et une autre pour
@@ -93,10 +87,7 @@ valeur de l’attribut  <code class="docutils literal notranslate"><span class="
 suppose qu’il y a moins de 100 enregistrements tels que <code class="docutils literal notranslate"><span class="pre">A</span></code>
 commençe par P. Combien de lectures coûte la recherche par l’index dans le pire
 des cas?</p>
-</li>
-</ul>
-<blockquote>
-<div><div class="admonition-correction admonition">
+<div class="admonition-correction admonition">
 <p class="admonition-title">Correction</p>
 <p>La recherche utilise  l’index non dense sur <code class="docutils literal notranslate"><span class="pre">A</span></code>. Celui-ci tient sur 15 blocs.
 La traversée de l’index part de la racine et arrive immédiatement à la feuille
@@ -111,13 +102,10 @@ Soit tous les articles de code compris entre P1A3 et P3G5 sont dans ce bloc soit
 adjacents). Dans ce dernier cas, une lecture du bloc
 adjacent chaîné est nécessaire. Donc la recherche coûte 2 ou 3 accès bloc.</p>
 </div>
-</div></blockquote>
-<ul class="simple">
+</li>
 <li><p>Même question avec l’index dense, pour une recherche sur l’attribut
-<code class="docutils literal notranslate"><span class="pre">B</span></code>.</p></li>
-</ul>
-<blockquote>
-<div><div class="admonition-correction admonition">
+<code class="docutils literal notranslate"><span class="pre">B</span></code>.</p>
+<div class="admonition-correction admonition">
 <p class="admonition-title">Correction</p>
 <p>La recherche utilise  l’index dense sur <code class="docutils literal notranslate"><span class="pre">B</span></code>. La  différence essentielle
 est que le parcours séquentiel s’effectue <em>au niveau des feuilles de l’index</em>.
@@ -130,7 +118,8 @@ lus dans l’index. Le coût prédominant est donc dans ce cas la multiplication
 des accès aléatoires au fichier de données, ce qui montre une nouvelle fois
 qu’une recherche par intervalle avec un index peut s’avérer contre-performante.</p>
 </div>
-</div></blockquote>
+</li>
+</ul>
 </div></blockquote>
 </section>
 <section id="index-et-optimisation">
@@ -839,17 +828,53 @@ bibliothèque :</p>
 <section id="stockage-et-indexation-6-pts">
 <h3>Stockage et indexation (6 pts)<a class="headerlink" href="#stockage-et-indexation-6-pts" title="Lien permanent vers ce titre">¶</a></h3>
 <blockquote>
-<div><ul class="simple">
-<li><p>Pour la table Livre, identifiez les clés primaires et étrangères.</p></li>
-<li><p>Donnez la commande SQL pour créer la table Livre.</p></li>
+<div><ul>
+<li><p>Pour la table Livre, identifiez les clés primaires et étrangères.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p>Clé primaire: id</p></li>
+<li><p>Clés étrangères: id_auteur <span class="math notranslate nohighlight">\(\rightarrow\)</span> Personne(id)</p></li>
+</ul>
+</div>
+</li>
+<li><p>Donnez la commande SQL pour créer la table Livre.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">create</span> <span class="k">table</span> <span class="n">Livre</span><span class="p">(</span>
+  <span class="n">id</span> <span class="nb">integer</span> <span class="k">not</span> <span class="k">null</span><span class="p">,</span>
+  <span class="n">titre</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span>
+  <span class="n">id_auteur</span> <span class="nb">integer</span><span class="p">,</span>
+  <span class="n">date_publication</span> <span class="nb">date</span><span class="p">,</span>
+  <span class="n">categorie</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span>
+  <span class="n">editeur</span> <span class="nb">varchar</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span>
+  <span class="k">primary</span> <span class="k">key</span> <span class="n">id</span><span class="p">,</span>
+  <span class="k">foreign</span> <span class="k">key</span> <span class="n">id_auteur</span> <span class="k">references</span>  <span class="n">Personne</span><span class="p">(</span><span class="n">id</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</li>
 <li><p>On  suppose que chaque enregistrement a une taille de
 250 octets et que chaque bloc a un entête de 150 octets.
 Indiquez le nombre de blocs nécessaires si la table
-contient 3 millions de livres. La taille d’un bloc est de 4 000 octets.</p></li>
+contient 3 millions de livres. La taille d’un bloc est de 4 000 octets.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il y a 3 850 octets utiles dans un bloc. On place <span class="math notranslate nohighlight">\(\lfloor 3850/250 \rfloor =15\)</span> enregistrements par bloc.
+Il faut <span class="math notranslate nohighlight">\(\lceil \frac{3 000 000}{15} \rceil = 200 000\)</span> blocs.</p>
+</div>
+</li>
 <li><p>On décide de trier la table Livre sur la date de publication et de construire
 un index non-dense à un niveau. Combien contient-t-il d’entrées,
 Sachant qu’une adresse et une date occupent chacun 8 octets, combien d’entrées met-on dans
-un bloc et combien de blocs sont nécessaires ?</p></li>
+un bloc et combien de blocs sont nécessaires ?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il y a 200 000 entrées de 16 octets chacune.
+On place <span class="math notranslate nohighlight">\(4000/16=250\)</span> entrées par bloc.  Il faut
+<span class="math notranslate nohighlight">\(\lceil \frac{200 000}{250} \rceil = 800\)</span> blocs.</p>
+</div>
+</li>
 </ul>
 </div></blockquote>
 </section>
@@ -946,13 +971,30 @@ un bloc et combien de blocs sont nécessaires ?</p></li>
 </table>
 <p>On met en place un index sur l’attribut <strong>âge</strong> de cette table.</p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>Construire l’arbre B d’ordre <strong>2</strong> (4 entrées par bloc)
 correspondant à cet ensemble d’articles, en respectant l’ordre d’arrivée.
 Donner les étapes de construction intermédiaires importantes (celles qui produisent
-un changement de la structure de l’arbre).</p></li>
+un changement de la structure de l’arbre).</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Standard</p>
+</div>
+</li>
 <li><p>On considère que cet arbre B  est stocké à raison d’un nœud par bloc sur disque. On recherche les noms des personnes dont l’âge est entre 20 et 40 ans (inclus).
-Combien de blocs disque doivent être chargés au pire des cas pour répondre à cette requête en utilisant l’arbre B ? Justifier.</p></li>
+Combien de blocs disque doivent être chargés au pire des cas pour répondre à cette requête en utilisant l’arbre B ? Justifier.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Il s’agit ici d’une requête par intervalle: on commence par chercher les enregistrements pour lesquels
+l’âge est égal à 20 (lecture de 3 blocs). Il suffit ensuite
+d’exploiter le chaînage des feuilles pour trouver les autres enregistrements, en parcourant
+ici encore 1 bloc dans l’arbre B. On charge donc   4
+blocs d’index. Il faut ensuite récupérer les données
+pointées par l’index vers le fichier sur disque. Dans le pire des cas,
+il faut lire un bloc pour chaque enregistrement.
+Donc on charge au pire 9 blocs.</p>
+</div>
+</li>
 </ul>
 </div></blockquote>
 </section>
@@ -970,6 +1012,12 @@ Combien de blocs disque doivent être chargés au pire des cas pour répondre à
 </pre></div>
 </div>
 <p>Donnez le plan d’exécution classique des boucles imbriquées indexées.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>On parcourt séquentiellement la table <code class="docutils literal notranslate"><span class="pre">Livre</span></code>. Pour chaque livre
+obtenu on utilise l’identifiant de l’auteur pour une recherche par index
+sur la table <code class="docutils literal notranslate"><span class="pre">Personne</span></code> (donc, parcours d’index suivi d’un accès direct).</p>
+</div>
 </li>
 </ul>
 </div></blockquote>
@@ -984,10 +1032,22 @@ Combien de blocs disque doivent être chargés au pire des cas pour répondre à
 </div>
 <p>Donner de même le plan d’exécution utilisant le plus possible les index
 et indiquer où se situe la sélection sur le titre.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>On parcourt <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code>, on utilise l’index sur la table <code class="docutils literal notranslate"><span class="pre">Livre</span></code>,
+et la sélection se fait au moment de l’accès direct.</p>
+</div>
 <ul class="simple">
 <li><p>Peut-on éviter tout parcours séquentiel en ajoutant un index sur
 le titre des livres ? Justifiez votre réponse.</p></li>
 </ul>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Pas vraiment, car même en cherchant le livre par l’index, on ne
+peut pas échapper  à un parcours séquentiel de la table <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code>
+dont l’index (dans l’ordre donné) ne permet pas une recherche basée
+sur <code class="docutils literal notranslate"><span class="pre">id_livre</span></code>.</p>
+</div>
 <ul class="simple">
 <li><p>On suppose qu’il n’y a pas d’index sur la table <code class="docutils literal notranslate"><span class="pre">Livre</span></code>.
 Elle occupe 50 MO, alors que la table <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code> en occupe 200.
@@ -995,6 +1055,13 @@ Le système dispose de 100 MO de mémoire RAM pour effectuer la jointure.
 Expliquer  l’algorithme de jointure qui vous semble le plus efficace.
 Combien de MOs seront lus au final ?</p></li>
 </ul>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>On charge la table <code class="docutils literal notranslate"><span class="pre">Livre</span></code> en mémoire sous la forme d’une
+table de hachage. Puis on parcourt séquentiellement <code class="docutils literal notranslate"><span class="pre">Emprunt</span></code>
+en cherchant le livre à chaque fois dans la table de hachage.
+On va lire une seule fois chaque table : 250 MO au total.</p>
+</div>
 </div></blockquote>
 </li>
 </ul>
@@ -1005,12 +1072,41 @@ Combien de MOs seront lus au final ?</p></li>
 <p>Soit l’exécution concurrente suivante</p>
 <p><span class="math notranslate nohighlight">\(H = r_1[x] r_2[x] r_3[y] w_1[x] w_1[z] c_1 w_2[y] c_2 w_3[z] c_3\)</span></p>
 <blockquote>
+<div><ul>
+<li><p>Donner la liste des conflits de H</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p>Voici les conflits</p>
+<blockquote>
 <div><ul class="simple">
-<li><p>Donner la liste des conflits de H</p></li>
+<li><p>sur x :  <span class="math notranslate nohighlight">\(r_2[x] w_1[x]\)</span></p></li>
+<li><p>sur y :  <span class="math notranslate nohighlight">\(r_3[y] w_2[y]\)</span></p></li>
+<li><p>sur z :  <span class="math notranslate nohighlight">\(w_1[z] w_3[z]\)</span></p></li>
+</ul>
+</div></blockquote>
+</div>
+</li>
 <li><p>Donner le graphe de sérialisation de <span class="math notranslate nohighlight">\(H\)</span>.
-Que pouvez-vous déduire de ce graphe?</p></li>
+Que pouvez-vous déduire de ce graphe?</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<p><span class="math notranslate nohighlight">\(T_2 \rightarrow T_1, T_3 \rightarrow T_2, T_1 \rightarrow T_3\)</span>.
+Il y a un cycle, dont <span class="math notranslate nohighlight">\(H\)</span> n’est pas <em>sérialisable</em>.</p>
+</div>
+</li>
 <li><p>Donner l’exécution finale par application de l’algorithme de verrouillage
-à deux phases.  Donner le détail du déroulement de l’algorithme.</p></li>
+à deux phases.  Donner le détail du déroulement de l’algorithme.</p>
+<div class="admonition-correction admonition">
+<p class="admonition-title">Correction</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(T_1\)</span>  est mis en attente au moment où <span class="math notranslate nohighlight">\(w_1[x]\)</span> est soumis
+(<span class="math notranslate nohighlight">\(x\)</span> a un  verrou partagé avec <span class="math notranslate nohighlight">\(T_2\)</span>)</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_2\)</span>  est mis en attente au moment où <span class="math notranslate nohighlight">\(w_2[y]\)</span> est soumis
+(<span class="math notranslate nohighlight">\(x\)</span> a un  verrou partagé avec <span class="math notranslate nohighlight">\(T_3\)</span>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(T_3\)</span> finit alors de s’exécuter, <span class="math notranslate nohighlight">\(T_2\)</span> est libérée et termine, puis <span class="math notranslate nohighlight">\(T_1\)</span>.</p></li>
+</ul>
+</div>
+</li>
 </ul>
 </div></blockquote>
 </section>

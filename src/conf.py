@@ -91,7 +91,7 @@ rp='public'
 annales_2020_1='public'
 annales_2020_2='public'
 annales_2022='public'
-annales_2023='private'
+annales_2023='public'
 
 devoir1='public'
 devoir2='public'

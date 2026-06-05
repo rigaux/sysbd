@@ -22,23 +22,23 @@ Questions :
     que chaque bloc contient un entête de 150 octets
     et qu'un enregistrement ne peut pas chevaucher 2 blocs?
 
-   .. ifconfig:: annales_2020_1 in ('public')
+    .. ifconfig:: annales_2020_1 in ('public')
 
-      .. admonition:: Correction
+       .. admonition:: Correction
       
            Un bloc contient 8 042 octets utiles. Donc 80 enregistrements
            par bloc au maximum. On divise les 120 000 enregistrements par 80 
            et on obtient 1 500 blocs
-
+           
   - On suppose maintenant que *F* est indexé par un index non dense 
     sur ``A``  et  un index dense sur un autre champ ``B``. On peut
     stocker 100 entrées dans un bloc d'index et aucune place libre n'est laissée dans les blocs. 
     Combien d'entrées y a-t-il dans les feuilles de l'index non dense? 
     dans les feuilles de l'index dense? 
+    
+    .. ifconfig:: annales_2020_1 in ('public')
 
-   .. ifconfig:: annales_2020_1 in ('public')
-
-      .. admonition:: Correction
+       .. admonition:: Correction
 
           Le fichier *F* contient 1 500 blocs et et trié sur ``A``.
           L'index non dense contient donc 1500 entrées, une par bloc et cet index occupe 15
@@ -56,9 +56,9 @@ Questions :
     commençe par P. Combien de lectures coûte la recherche par l'index dans le pire
     des cas?
 
-   .. ifconfig:: annales_2020_1 in ('public')
+    .. ifconfig:: annales_2020_1 in ('public')
 
-      .. admonition:: Correction
+       .. admonition:: Correction
 
           La recherche utilise  l'index non dense sur ``A``. Celui-ci tient sur 15 blocs. 
           La traversée de l'index part de la racine et arrive immédiatement à la feuille 
@@ -72,13 +72,13 @@ Questions :
           à cheval sur deux blocs adjacents (ils ne peuvent pas être sur plus de 2 blocs
           adjacents). Dans ce dernier cas, une lecture du bloc
           adjacent chaîné est nécessaire. Donc la recherche coûte 2 ou 3 accès bloc.
-
+          
   - Même question avec l'index dense, pour une recherche sur l'attribut
     ``B``.
 
-   .. ifconfig:: annales_2020_1 in ('public')
+    .. ifconfig:: annales_2020_1 in ('public')
 
-      .. admonition:: Correction
+       .. admonition:: Correction
 
           La recherche utilise  l'index dense sur ``B``. La  différence essentielle 
           est que le parcours séquentiel s'effectue *au niveau des feuilles de l'index*.
